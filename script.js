@@ -16,7 +16,7 @@ const UI_TEXT = {
     jp: {
         cat_all: "全在庫商品", cat_kh: "🇰🇭 カンボジア産", cat_jp: "🇯🇵 日本産", origin_kh: "カンボジア産", origin_jp: "日本産", size_selectable: "サイズ選択可", noProducts: '該当商品なし', cat_frozen: "冷凍品",
         cat_fillet: "鮮魚フィレ・セミドレス・ドレス・ホール", cat_oil: "調味料・油", cat_kitchen: "厨房用品", cat_vege: "野菜", cat_waiting: "入荷待ち", inquiry: "問い合わせ",
-        searchPlaceholder: "商品名で検索...", noticeTitle: "【 お知らせ 】 クリックで詳細を表示",
+        searchPlaceholder: "商品名で検索...", noticeTitle: "【お知らせ】クリック▲で詳細を閉じる",
         orderBarLabel: "📋 ご注文内容", orderNote: "* 最終的な数量・重量は納品時に確定いたします",
         exportCurrent: "⬇ 表示中をExcelへ", exportAll: "⬇ 全商品をExcelへ",
         clearBtn: 'クリア', recommendTitle: "🔥 本日のおすすめ", noProducts: '該当商品なし',
@@ -30,8 +30,7 @@ const UI_TEXT = {
         btnRegister: "登録",
         btnFirstOrder: "初めての方", btnRepeatOrder: "ご注文",
         btnSubmitFirst: "登録案内を受け取る", btnSubmitRepeat: "注文する",
-        noticeBody:`・初めてのご注文の際には、必ず「初めての方」のボタンからご登録お願い致します。<br>・Telegramでご注文後、注文確認シートが送付されます。<br>・写真をクリックしていただきますと商品説明も見ていただけます。`,
-    },
+                noticeBody:`・初めてのご注文の際には、必ず「初めての方」のボタンからご登録お願い致します。<br>・写真をクリックしていただきますと商品説明も見ていただけます。<br>・ご注文はフィレからもご注文いただけますので、色々なお魚をぜひお試しください。`,
     en: {
         cat_all: "ALL of Stock", cat_kh: "🇰🇭 CAMBODIA", cat_jp: "🇯🇵 JAPAN", origin_kh: "CAMBODIA", origin_jp: "JAPAN", size_selectable: "Size Selection Available", noProducts: 'No products', cat_frozen: "FROZEN",
         cat_fillet: "FILLET/DR/SD/WHOLE", cat_oil: "OIL & SEASONING", cat_kitchen: "KITCHEN", cat_vege: "VEGETABLES", cat_waiting: "OUT OF STOCK", inquiry: "INQUIRY",
@@ -49,7 +48,7 @@ const UI_TEXT = {
         btnRegister: "Register",
         btnFirstOrder: "First Time", btnRepeatOrder: "Order",
         btnSubmitFirst: "Get Guide", btnSubmitRepeat: "Order",
-        noticeBody:`- For your first order, please make sure to register via the "First Time" button.<br>- You'll receive a confirmation sheet via Telegram.<br>- Click a product photo to see its description.`
+                noticeBody:`- For your first order, please make sure to register via the "First Time" button.<br>- Click a product photo to see its description.<br>- Fillets are also available to order — please try a variety of fish.`
     }
 };
 
