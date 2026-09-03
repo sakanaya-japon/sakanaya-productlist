@@ -122,7 +122,8 @@ header {
 
 /* 通知エリア */
 .notice-box { background: #fff; border-left: 5px solid var(--accent-red); border-radius: 8px; border: 1px solid #ddd; margin: 10px auto; max-width: 800px; }
-.notice-box summary { padding: 12px 20px; font-weight: bold; color: var(--accent-red); cursor: pointer; display: flex; justify-content: space-between; }
+.notice-box summary { padding: 12px 20px; font-weight: bold; color: var(--accent-red); cursor: pointer; display: flex; justify-content: space-between; list-style: none; }
+.notice-box summary::-webkit-details-marker { display: none; }
 
 /* ══════════════════════════════════════════════════════════
    4. 商品カード・グリッド (Main Display)
