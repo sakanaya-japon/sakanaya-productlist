@@ -21,8 +21,13 @@
 | `web_stock` | 商品マスター。商品名・価格・在庫の入力元。スクリプトがIDで読みに行く |
 
 `access_codes` は `SpreadsheetApp.getActive()`、すなわちスクリプトが紐づく
-`自動注文管理ソフト` 側に作られる。顧客情報と同じ場所になるので都合がよい。
-スクリプトプロパティ `SPREADSHEET_ID` は**設定しないこと**（設定するとそちらが優先される）。
+`自動注文管理ソフト` 側に作られる。`Users` や `注文集計` と同じ場所になるので都合がよい。
+
+> **既存の `SPREADSHEET_ID` には触れないこと。**
+> このプロジェクトでは `SPREADSHEET_ID` は**商品マスター（web_stock）のID**を指しており、
+> `getMergedProductData()` が `openById` で読みに行く。`checkRequiredProperties_` の必須キーでもある。
+> 価格の出し分けはこのキーを一切読まない（専用キー `ACCESS_CODES_SS_ID` を用意してあるが、
+> 通常は未設定のままでよい）。
 
 ## 全体の流れ
 

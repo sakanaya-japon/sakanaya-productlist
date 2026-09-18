@@ -20,7 +20,8 @@
  *
  * (2) access_codes シートを作る（ensureAccessCodeSheet() で自動作成できる）
  *     A:code  B:partner_name  C:issued_at  D:expires_at  E:revoked  F:last_used_at
- *     スクリプトが紐づくブック（自動注文管理ソフト）に作られる。SPREADSHEET_ID は設定しないこと
+ *     スクリプトが紐づくブック（自動注文管理ソフト）に作られる。
+ *     ※ 既存の SPREADSHEET_ID（商品マスターのID）はこの機能では使わない。触らないこと
  *
  * (3) 既存の doGet に2行足す（下の doGet 例を参照）
  * (4) 既存の doPost の分岐に action==='unlock' を足す（下の doPost 例を参照）
@@ -35,9 +36,10 @@
 // 設定
 // ============================================================
 var ACCESS_SHEET_NAME = 'access_codes';
-// 通常は getActive()（＝スクリプトが紐づく「自動注文管理ソフト」）で足りる。
-// 別のブックに access_codes を置きたい場合だけ、スクリプトプロパティに SPREADSHEET_ID を設定する
-var SPREADSHEET_ID_KEY = 'SPREADSHEET_ID';
+// access_codes は既定で getActive()（＝スクリプトが紐づく「自動注文管理ソフト」）に置く。
+// ※ 既存プロパティ SPREADSHEET_ID は「商品マスター（web_stock）」を指す別用途のため使わない。
+//    別ブックに置きたい場合だけ、専用キー ACCESS_CODES_SS_ID を設定する。
+var ACCESS_CODES_SS_ID_KEY = 'ACCESS_CODES_SS_ID';
 var ACCESS_SECRET_KEY = 'ACCESS_TOKEN_SECRET';
 var TOKEN_TTL_DAYS = 90;   // トークンの有効期間。切れたらカタログが再ログインを促す
 var CODE_TTL_DAYS = 365;   // 発行するコードの既定の有効期間
@@ -50,17 +52,18 @@ var CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 /**
  * access_codes を置くスプレッドシートを返す。
- * 既定はスクリプトが紐づくブック（自動注文管理ソフト）。
- * 別のブックに置きたい場合だけ、スクリプトプロパティ SPREADSHEET_ID で上書きする。
+ * 既定はスクリプトが紐づくブック（自動注文管理ソフト＝Users / 注文集計 と同じ場所）。
+ * 既存の SPREADSHEET_ID は商品マスターを指す別用途なので、ここでは読まない。
+ * 別ブックに置きたい場合だけ専用キー ACCESS_CODES_SS_ID を設定する。
  */
 function getBook_() {
-  var id = PropertiesService.getScriptProperties().getProperty(SPREADSHEET_ID_KEY);
+  var id = PropertiesService.getScriptProperties().getProperty(ACCESS_CODES_SS_ID_KEY);
   if (id) return SpreadsheetApp.openById(id);
   var active = SpreadsheetApp.getActive();
   if (active) return active;
   throw new Error(
-    'スプレッドシートを特定できません。このスクリプトが商品マスターに紐づいていない場合は、' +
-    'スクリプトプロパティ ' + SPREADSHEET_ID_KEY + ' に商品マスターのIDを設定してください。');
+    'スプレッドシートを特定できません。スクリプトがブックに紐づいていない場合は、' +
+    'スクリプトプロパティ ' + ACCESS_CODES_SS_ID_KEY + ' に access_codes を置くブックのIDを設定してください。');
 }
 
 // ============================================================
