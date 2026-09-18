@@ -478,3 +478,27 @@ header {
     flex-wrap: wrap;
 }
 .export-area.is-visible { display: flex; }
+
+/* 取引先ログイン（価格の出し分け・2026-09-18） */
+/* 未認証のとき、価格の位置に出す控えめな案内 */
+.price-locked {
+    color: #777;
+    font-size: 0.85em;
+    font-weight: normal;
+}
+
+/* ヘッダーのログイン／ログアウトボタン */
+.access-btn {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 5px 10px;
+    background: #fff;
+    color: #333;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.access-btn:hover { background: #f2f2f2; }
