@@ -76,8 +76,10 @@
         <input type="text" id="search-input" placeholder="Search product name..." onkeyup="applyFilters()">
     </div>
 
-    <!-- 商品リストのExcel(CSV)ダウンロード。クライアント側のみで完結・表示中/全商品を切替 -->
-    <div class="export-area" style="max-width:800px; margin:0 auto 10px; padding:0 15px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+    <!-- 商品リストのExcel(CSV)ダウンロード。クライアント側のみで完結・表示中/全商品を切替。
+         2026-09-18: 価格表の一括持ち出しを防ぐため既定で非表示にした。取引先認証の導入後、
+         認証済みの利用者にだけ .is-visible を付けて再表示する（表示制御は style.css / script.js）。 -->
+    <div id="export-area" class="export-area">
         <button id="export-current-btn" class="nav-btn" onclick="exportCatalog('current')">⬇ This view to Excel</button>
         <button id="export-all-btn" class="nav-btn" onclick="exportCatalog('all')">⬇ All items to Excel</button>
     </div>
