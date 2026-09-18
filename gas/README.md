@@ -30,6 +30,9 @@ issueAccessCode('店名')
 
 ## 導入手順
 
+0. 商品マスター **`web_stock`** を開き、**拡張機能 → Apps Script** でスクリプトを開く
+   （そこに `doGet` / `doPost` が無ければ単独スクリプトなので、script.google.com から探し、
+   スクリプトプロパティ `SPREADSHEET_ID` に `web_stock` のIDを設定してから進める）
 1. Apps Script エディタに `price-gating.gs` の内容を追加する
 2. `setupAccessSecret()` を1回実行する（HMAC の秘密鍵を生成）
 3. `ensureAccessCodeSheet()` を1回実行する（`access_codes` シートを作成）

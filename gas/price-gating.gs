@@ -20,6 +20,8 @@
  *
  * (2) スプレッドシートに access_codes シートを作る（ensureAccessCodeSheet() で自動作成できる）
  *     A:code  B:partner_name  C:issued_at  D:expires_at  E:revoked  F:last_used_at
+ *     ※ このスクリプトが商品マスターに紐づいていない（単独スクリプトの）場合は、
+ *        先にスクリプトプロパティ SPREADSHEET_ID に商品マスターのIDを設定すること
  *
  * (3) 既存の doGet に2行足す（下の doGet 例を参照）
  * (4) 既存の doPost の分岐に action==='unlock' を足す（下の doPost 例を参照）
@@ -34,11 +36,33 @@
 // 設定
 // ============================================================
 var ACCESS_SHEET_NAME = 'access_codes';
+// 商品マスター（web_stock）に紐づいたスクリプトなら getActive() で足りる。
+// 単独スクリプトとして作られている場合は、スクリプトプロパティに SPREADSHEET_ID を設定する
+var SPREADSHEET_ID_KEY = 'SPREADSHEET_ID';
 var ACCESS_SECRET_KEY = 'ACCESS_TOKEN_SECRET';
 var TOKEN_TTL_DAYS = 90;   // トークンの有効期間。切れたらカタログが再ログインを促す
 var CODE_TTL_DAYS = 365;   // 発行するコードの既定の有効期間
 // 紛らわしい文字（0/O/1/I/L）を除いた英数字。口頭やチャットで伝えても取り違えにくい
 var CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+// ============================================================
+// スプレッドシートの解決
+// ============================================================
+
+/**
+ * access_codes を置くスプレッドシートを返す。
+ * このスクリプトが商品マスターに紐づいていれば getActive() が使える。
+ * 単独スクリプトの場合はスクリプトプロパティ SPREADSHEET_ID を見る。
+ */
+function getBook_() {
+  var id = PropertiesService.getScriptProperties().getProperty(SPREADSHEET_ID_KEY);
+  if (id) return SpreadsheetApp.openById(id);
+  var active = SpreadsheetApp.getActive();
+  if (active) return active;
+  throw new Error(
+    'スプレッドシートを特定できません。このスクリプトが商品マスターに紐づいていない場合は、' +
+    'スクリプトプロパティ ' + SPREADSHEET_ID_KEY + ' に商品マスターのIDを設定してください。');
+}
 
 // ============================================================
 // 初期セットアップ（エディタから1回だけ実行する）
@@ -59,7 +83,7 @@ function setupAccessSecret() {
 
 /** access_codes シートが無ければ見出し付きで作る */
 function ensureAccessCodeSheet() {
-  var ss = SpreadsheetApp.getActive();
+  var ss = getBook_();
   var sh = ss.getSheetByName(ACCESS_SHEET_NAME);
   if (sh) return sh;
   sh = ss.insertSheet(ACCESS_SHEET_NAME);
@@ -181,7 +205,7 @@ function isCodeActive_(code) {
 
 /** access_codes からコード行を探す。無ければ null */
 function findCodeRow_(code) {
-  var sh = SpreadsheetApp.getActive().getSheetByName(ACCESS_SHEET_NAME);
+  var sh = getBook_().getSheetByName(ACCESS_SHEET_NAME);
   if (!sh) return null;
   var target = String(code).trim().toUpperCase();
   var values = sh.getDataRange().getValues();
@@ -278,7 +302,7 @@ function handleUnlock_(body) {
 
   // 最終利用日を記録しておく（使われていないコードの棚卸しに使う）
   try {
-    SpreadsheetApp.getActive().getSheetByName(ACCESS_SHEET_NAME).getRange(row.rowIndex, 6).setValue(new Date());
+    getBook_().getSheetByName(ACCESS_SHEET_NAME).getRange(row.rowIndex, 6).setValue(new Date());
   } catch (err) {}
 
   return json({
