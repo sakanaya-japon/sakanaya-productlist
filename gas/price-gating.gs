@@ -249,36 +249,14 @@ function stripPrices_(products) {
 // ============================================================
 
 /**
- * doGet の例。既存の doGet に ★ の3箇所を足すだけでよい。
+ * 差し込み済みの完成版を gas/doGet-doPost.gs に用意してある。
+ * 既存プロジェクトの「2. 外部連携（doGet / doPost）」を、そのファイルの内容で置き換えること。
  *
- * function doGet(e) {
- *   var products = buildProducts_();            // 既存の商品組み立て処理
- *   var updateDate = getUpdateDate_();          // 既存の更新日取得
- *
- *   // ★1 トークンを検証する
- *   var access = verifyToken_(e && e.parameter ? e.parameter.token : '');
- *   // ★2 通らなければ価格を落とす
- *   if (!access) products = stripPrices_(products);
- *
- *   return ContentService
- *     .createTextOutput(JSON.stringify({
- *       products: products,
- *       updateDate: updateDate,
- *       priced: !!access                        // ★3 カタログ側の表示判断用（任意）
- *     }))
- *     .setMimeType(ContentService.MimeType.JSON);
- * }
- */
-
-/**
- * doPost の分岐に足す処理。既存の register_user / send_order と同じ並びに置く。
- *
- * function doPost(e) {
- *   var body = JSON.parse(e.postData.contents);
- *   if (body.action === 'register_user') { ... 既存 ... }
- *   if (body.action === 'send_order')    { ... 既存 ... }
- *   if (body.action === 'unlock')        return handleUnlock_(body);   // ★ これを足す
- * }
+ * 変更点は3箇所だけで、send_order / register_user の処理と応答は変えていない:
+ *   1. doGet  … const access = verifyToken_(e && e.parameter ? e.parameter.token : '');
+ *                if (!access && Array.isArray(data.products)) data.products = stripPrices_(data.products);
+ *   2. doGet  … data.priced = !!access;
+ *   3. doPost … if (data.action === "unlock") return handleUnlock_(data);
  */
 
 /** action='unlock' の本体。コードを確認し、通ればトークンを返す */

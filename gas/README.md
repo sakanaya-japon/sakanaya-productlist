@@ -16,6 +16,8 @@
 | 名前 | 役割 |
 |---|---|
 | `自動注文管理ソフト` | **スクリプトの置き場所**。注文履歴・顧客情報。`access_codes` もここに作られる |
+| `gas/price-gating.gs` | 新規追加するファイル（トークンの発行・検証、コード管理、価格除去） |
+| `gas/doGet-doPost.gs` | 既存の doGet / doPost を置き換える完成版 |
 | `web_stock` | 商品マスター。商品名・価格・在庫の入力元。スクリプトがIDで読みに行く |
 
 `access_codes` は `SpreadsheetApp.getActive()`、すなわちスクリプトが紐づく
@@ -47,7 +49,8 @@ issueAccessCode('店名')
 1. Apps Script エディタに `price-gating.gs` の内容を追加する
 2. `setupAccessSecret()` を1回実行する（HMAC の秘密鍵を生成）
 3. `ensureAccessCodeSheet()` を1回実行する（`access_codes` シートを作成）
-4. 既存の `doGet` に3行、`doPost` に1行を差し込む（`price-gating.gs` 冒頭のコメント参照）
+4. 既存の「2. 外部連携（doGet / doPost）」を `doGet-doPost.gs` の内容で置き換える
+   （差し込み済みの完成版。`send_order` / `register_user` の処理と応答は変えていない）
 5. **ウェブアプリを新しいバージョンとして再デプロイする**
 6. その後でカタログ側（`index.html` / `script.js` / `style.css`）を公開する
 
