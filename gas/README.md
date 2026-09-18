@@ -11,6 +11,17 @@
 フロント側の分岐は防御にならない（HTML も JS も読めるため）。
 **価格をそもそも応答に含めない**ことだけが実効性のある対策になる。
 
+## 関係するファイル
+
+| 名前 | 役割 |
+|---|---|
+| `自動注文管理ソフト` | **スクリプトの置き場所**。注文履歴・顧客情報。`access_codes` もここに作られる |
+| `web_stock` | 商品マスター。商品名・価格・在庫の入力元。スクリプトがIDで読みに行く |
+
+`access_codes` は `SpreadsheetApp.getActive()`、すなわちスクリプトが紐づく
+`自動注文管理ソフト` 側に作られる。顧客情報と同じ場所になるので都合がよい。
+スクリプトプロパティ `SPREADSHEET_ID` は**設定しないこと**（設定するとそちらが優先される）。
+
 ## 全体の流れ
 
 ```
@@ -30,9 +41,9 @@ issueAccessCode('店名')
 
 ## 導入手順
 
-0. 商品マスター **`web_stock`** を開き、**拡張機能 → Apps Script** でスクリプトを開く
-   （そこに `doGet` / `doPost` が無ければ単独スクリプトなので、script.google.com から探し、
-   スクリプトプロパティ `SPREADSHEET_ID` に `web_stock` のIDを設定してから進める）
+0. **`自動注文管理ソフト`** を開き、**拡張機能 → Apps Script** でスクリプトを開く
+   https://docs.google.com/spreadsheets/d/1RGMOTrXvtw5dIF2WkoAk7lv12MJR8o0ritOh9NAGQvA/edit
+   （2026-07-05 作成の新ブック。注文履歴と顧客情報が入っており、`doGet` / `doPost` はここに紐づく）
 1. Apps Script エディタに `price-gating.gs` の内容を追加する
 2. `setupAccessSecret()` を1回実行する（HMAC の秘密鍵を生成）
 3. `ensureAccessCodeSheet()` を1回実行する（`access_codes` シートを作成）

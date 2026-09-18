@@ -18,10 +18,9 @@
  *     Apps Script エディタ → 歯車（プロジェクトの設定）→ スクリプト プロパティ
  *     値は setupAccessSecret() を一度実行すると自動生成される
  *
- * (2) スプレッドシートに access_codes シートを作る（ensureAccessCodeSheet() で自動作成できる）
+ * (2) access_codes シートを作る（ensureAccessCodeSheet() で自動作成できる）
  *     A:code  B:partner_name  C:issued_at  D:expires_at  E:revoked  F:last_used_at
- *     ※ このスクリプトが商品マスターに紐づいていない（単独スクリプトの）場合は、
- *        先にスクリプトプロパティ SPREADSHEET_ID に商品マスターのIDを設定すること
+ *     スクリプトが紐づくブック（自動注文管理ソフト）に作られる。SPREADSHEET_ID は設定しないこと
  *
  * (3) 既存の doGet に2行足す（下の doGet 例を参照）
  * (4) 既存の doPost の分岐に action==='unlock' を足す（下の doPost 例を参照）
@@ -36,8 +35,8 @@
 // 設定
 // ============================================================
 var ACCESS_SHEET_NAME = 'access_codes';
-// 商品マスター（web_stock）に紐づいたスクリプトなら getActive() で足りる。
-// 単独スクリプトとして作られている場合は、スクリプトプロパティに SPREADSHEET_ID を設定する
+// 通常は getActive()（＝スクリプトが紐づく「自動注文管理ソフト」）で足りる。
+// 別のブックに access_codes を置きたい場合だけ、スクリプトプロパティに SPREADSHEET_ID を設定する
 var SPREADSHEET_ID_KEY = 'SPREADSHEET_ID';
 var ACCESS_SECRET_KEY = 'ACCESS_TOKEN_SECRET';
 var TOKEN_TTL_DAYS = 90;   // トークンの有効期間。切れたらカタログが再ログインを促す
@@ -51,8 +50,8 @@ var CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 /**
  * access_codes を置くスプレッドシートを返す。
- * このスクリプトが商品マスターに紐づいていれば getActive() が使える。
- * 単独スクリプトの場合はスクリプトプロパティ SPREADSHEET_ID を見る。
+ * 既定はスクリプトが紐づくブック（自動注文管理ソフト）。
+ * 別のブックに置きたい場合だけ、スクリプトプロパティ SPREADSHEET_ID で上書きする。
  */
 function getBook_() {
   var id = PropertiesService.getScriptProperties().getProperty(SPREADSHEET_ID_KEY);
