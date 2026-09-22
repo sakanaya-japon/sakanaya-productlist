@@ -502,3 +502,37 @@ header {
     white-space: nowrap;
 }
 .access-btn:hover { background: #f2f2f2; }
+
+/* ヘッダー右側：電話番号と取引先ログインの間隔（2026-09-22）
+   以前は .contact-section-inline に指定がなく、2つが半角スペース1つで隣り合っていた。
+   横並び時は間隔をとり、幅が足りなければ折り返して上下にも間隔をとる。 */
+.contact-section-inline {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 10px 20px;           /* 上下10px・左右20px */
+}
+.contact-section-inline .tel-inline-text {
+    white-space: nowrap;
+    padding: 4px 0;
+    letter-spacing: 0.03em;
+}
+.contact-section-inline .access-btn {
+    margin-top: 0;            /* 横並びにしたので上マージンは不要 */
+    padding: 7px 14px;
+    font-size: 0.8rem;
+    border-radius: 6px;
+    max-width: 220px;         /* ログイン後は「✅ 店名」になるので、長い店名は省略表示 */
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* スマホ：ロゴと同じ行に並べたまま間隔だけ確保する（幅100%にするとロゴが1行を占有し、ヘッダーが縦に伸びる） */
+@media (max-width: 768px) {
+    .contact-section-inline {
+        justify-content: center;
+        gap: 8px 16px;
+    }
+    .contact-section-inline .access-btn { max-width: 150px; } /* 長い店名でも1行に収める */
+}
