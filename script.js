@@ -3,6 +3,12 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbwgE8fOWPyXkr2WTZNIvH5G
 const TELEGRAM_API_URL = 'https://telegram-bot-729928920450.asia-northeast1.run.app/';
 const TELEGRAM_LINK = 'https://t.me/SAKANAYAJAPON';
 
+// 取引先アクセス（価格の出し分け・2026-09-18）
+// 価格は GAS が「トークンを検証したうえで返す／返さない」を決める。ここでの pricesVisible は
+// 表示を切り替えるためだけの値であり、防御ではない（未認証なら価格はそもそも応答に含まれない）。
+const ACCESS_TOKEN_KEY = 'biz_access_token';
+const ACCESS_NAME_KEY = 'biz_partner_name';
+
 let currentLang = (navigator.language || navigator.userLanguage || 'ja').startsWith('ja') ? 'jp' : 'en';
 let currentCategory = 'ALL';
 let allProducts = [];
@@ -10,6 +16,8 @@ let cart = {};
 let currentClientOrderId = ''; // send_order の冪等キー（確認モーダルで採番→成功で破棄・設計§5-1）
 let lastFiltered = []; // 直近の絞り込み結果（Excelダウンロード「表示中」用）
 let catalogUpdateDate = ''; // カタログの更新日（ダウンロードファイル名用）
+let pricesVisible = false; // 直近の応答に価格が含まれていたか（＝価格を表示してよいか）
+let partnerName = ''; // 認証済み取引先の表示名（ヘッダー表示用）
 
 // 2. UI TEXT
 const UI_TEXT = {
@@ -19,6 +27,17 @@ const UI_TEXT = {
         searchPlaceholder: "商品名で検索...", noticeTitle: "【お知らせ】クリック▲で詳細を閉じる",
         orderBarLabel: "📋 ご注文内容", orderNote: "* 最終的な数量・重量は納品時に確定いたします",
         exportCurrent: "⬇ 表示中をExcelへ", exportAll: "⬇ 全商品をExcelへ",
+        priceLocked: "取引先の方に表示", unlockBtn: "🔓 取引先ログイン", unlockedBtn: "✅ 取引先", logoutBtn: "ログアウト",
+        unlockTitle: "取引先ログイン",
+        unlockLead: "お渡ししている取引先コードをご入力ください。価格が表示されます。",
+        unlockPlaceholder: "取引先コード", unlockSubmit: "ログイン", unlockCancel: "キャンセル",
+        unlockHelp: "コードをお持ちでないお客様は、Telegram からお気軽にお問い合わせください。",
+        unlockSending: "確認中です…📡",
+        unlockOk: "✅ 確認できました。価格を表示します。",
+        unlockNg: "⚠️ コードを確認できませんでした。恐れ入りますが、もう一度お試しください。",
+        unlockErr: "⚠️ 通信に失敗しました。通信環境をご確認のうえ、もう一度お試しください。",
+        unlockExpired: "🔓 ログインの有効期限が切れました。恐れ入りますが、再度ログインしてください。",
+        exportLocked: "Excelへの出力は、取引先ログイン後にご利用いただけます。",
         clearBtn: 'クリア', recommendTitle: "🔥 本日のおすすめ", noProducts: '該当商品なし',
         stock: 'STOCK', stockLeft: '残り', size: 'サイズ', emptyCart: '商品が選択されていません。',
         weightCalc: '重量計算', qtyCalc: '数量計算', labelNotes: 'メモ',
@@ -38,6 +57,17 @@ const UI_TEXT = {
         searchPlaceholder: "Search...", noticeTitle: "【 NOTICE 】 Click for details",
         orderBarLabel: "📋 Your Order", orderNote: "* Final price confirmed upon delivery",
         exportCurrent: "⬇ This view to Excel", exportAll: "⬇ All items to Excel",
+        priceLocked: "Partners only", unlockBtn: "🔓 Partner login", unlockedBtn: "✅ Partner", logoutBtn: "Log out",
+        unlockTitle: "Partner login",
+        unlockLead: "Enter the partner code we issued to you to see prices.",
+        unlockPlaceholder: "Partner code", unlockSubmit: "Log in", unlockCancel: "Cancel",
+        unlockHelp: "Don't have a code yet? Please contact us on Telegram.",
+        unlockSending: "Checking… 📡",
+        unlockOk: "✅ Verified. Showing prices.",
+        unlockNg: "⚠️ We couldn't verify that code. Please check it and try again.",
+        unlockErr: "⚠️ Connection failed. Please check your connection and try again.",
+        unlockExpired: "🔓 Your login has expired. Please log in again.",
+        exportLocked: "Excel export is available after partner login.",
         clearBtn: 'Clear', recommendTitle: "🔥 Recommendation", noProducts: 'No products',
         stock: 'STOCK', stockLeft: 'Stock ', size: 'Size', emptyCart: 'Cart is empty.',
         weightCalc: 'Weight', qtyCalc: 'Quantity', labelNotes: 'Notes',
@@ -63,10 +93,48 @@ function toNumber(v, f = 0) { const n = Number(v); return Number.isFinite(n) ? n
 function getCalcClass(p) { return (p.variants || []).some(v => String(v.price_unit).toLowerCase() === 'kg') ? 'weight' : 'qty'; }
 function getCalcLabel(p) { return getCalcClass(p) === 'weight' ? UI_TEXT[currentLang].weightCalc : UI_TEXT[currentLang].qtyCalc; }
 
+// 取引先トークンの保管。プライベートモード等で localStorage が使えない環境でも
+// 例外で全体が止まらないようにする（その場合はセッション中だけ価格が見える状態になる）
+let accessTokenFallback = '';
+function getAccessToken() {
+    try { return localStorage.getItem(ACCESS_TOKEN_KEY) || accessTokenFallback || ''; }
+    catch (e) { return accessTokenFallback || ''; }
+}
+function setAccess(token, name) {
+    accessTokenFallback = token || '';
+    partnerName = name || '';
+    try {
+        localStorage.setItem(ACCESS_TOKEN_KEY, token || '');
+        localStorage.setItem(ACCESS_NAME_KEY, name || '');
+    } catch (e) {}
+}
+function clearAccess() {
+    accessTokenFallback = '';
+    partnerName = '';
+    try {
+        localStorage.removeItem(ACCESS_TOKEN_KEY);
+        localStorage.removeItem(ACCESS_NAME_KEY);
+    } catch (e) {}
+}
+function loadPartnerName() {
+    try { partnerName = localStorage.getItem(ACCESS_NAME_KEY) || ''; } catch (e) { partnerName = ''; }
+}
+
+// 応答に価格が実在するかで表示可否を決める。GAS と本ファイルのデプロイ順に依存しないための判定
+// （旧GAS＝全員に価格あり／新GAS＝未認証には価格なし）。防御はあくまで GAS 側にある
+function dataHasPrices(products) {
+    return (products || []).some(p => (p.variants || []).some(v => v && v.price_usd !== undefined && v.price_usd !== null && v.price_usd !== ''));
+}
+function hasAnyVariant(products) {
+    return (products || []).some(p => (p.variants || []).length > 0);
+}
+
 // 4. CORE FUNCTIONS
 async function fetchProducts() {
+    const token = getAccessToken();
     try {
-        const res = await fetch(GAS_URL);
+        // トークンは GAS が検証し、通ったときだけ価格つきの応答を返す
+        const res = await fetch(token ? `${GAS_URL}?token=${encodeURIComponent(token)}` : GAS_URL);
         const data = await res.json();
         catalogUpdateDate = data.updateDate || '';
         if (data.updateDate && document.getElementById('update-date')) {
@@ -79,6 +147,14 @@ async function fetchProducts() {
             return { ...p, variants: sortedVs };
         }).filter(p => (p.name_jp || p.name_en || '').trim() !== '')
           .sort((a, b) => toNumber(a.sort_order, 9999) - toNumber(b.sort_order, 9999));
+        pricesVisible = dataHasPrices(allProducts);
+        // トークンを送ったのに価格が返らない＝失効・取消・コード削除。保存分を破棄して再ログインを促す
+        // （商品が1件も無い応答で誤って失効扱いにしないよう hasAnyVariant で守る）
+        if (token && !pricesVisible && hasAnyVariant(allProducts)) {
+            clearAccess();
+            setAccessStatus(UI_TEXT[currentLang].unlockExpired, '#c62828');
+        }
+        updateAccessUi();
         applyFilters();
     } catch (e) {
         const pc = document.getElementById('product-container');
@@ -169,12 +245,16 @@ function buildCard(p) {
             const isOut = stockNum <= 0;
             const atMax = qty + 1 > stockNum; // 次の＋でストック超過なら無効化（端数在庫でもガード判定と一致・2026-08-05）
             // 表記: 「名称：$価格/kg|/pic」（区切りは：・単位はバリアントのprice_unit基準で kg→/kg・それ以外→/pic）
+            // 未認証（＝GASが価格を返していない）ときは価格の位置に取引先向けの案内を出す
             const unitSuffix = String(v.price_unit).toLowerCase() === 'kg' ? '/kg' : '/pic';
             const sep = currentLang === 'jp' ? '：' : ': ';
+            const priceText = pricesVisible
+                ? `$${toNumber(v.price_usd).toFixed(2)}${unitSuffix}`
+                : `<span class="price-locked">${t.priceLocked}</span>`;
             return `
                 <div class="variant-row">
                     <button class="variant-select-btn" onclick="selectVariantImage('${pid}', '${esc(v.image_variant)}', '${esc(p.image_main)}', this)">
-                        ${esc(getVariantName(v))}${sep}$${toNumber(v.price_usd).toFixed(2)}${unitSuffix}
+                        ${esc(getVariantName(v))}${sep}${priceText}
                     </button>
                     <div class="variant-qty-wrap">
                         <button class="qty-btn" onclick="changeCartQty('${vid}', -1)">−</button>
@@ -298,6 +378,7 @@ function setLang(lang) {
             else el.textContent = mapping[id];
         }
     }
+    updateAccessUi(); // ログインボタンの表記も言語に追従させる
     applyFilters(); renderCart();
 }
 
@@ -514,6 +595,90 @@ async function finalizeOrderProcess() {
     }
 }
 
+// 8-B. 取引先ログイン（価格の出し分け・2026-09-18）
+// コードの正否とトークンの発行・検証はすべて GAS 側で行う。ここは入力と表示だけを担う。
+
+// ヘッダーのログインボタン表記と、Excel出力ボタンの表示可否をまとめて更新
+function updateAccessUi() {
+    const t = UI_TEXT[currentLang];
+    const btn = document.getElementById('access-btn');
+    if (btn) {
+        btn.textContent = pricesVisible ? (partnerName ? `✅ ${partnerName}` : t.unlockedBtn) : t.unlockBtn;
+        btn.title = pricesVisible ? t.logoutBtn : t.unlockTitle;
+    }
+    const area = document.getElementById('export-area');
+    if (area) area.classList.toggle('is-visible', pricesVisible);
+}
+
+// ログインモーダルの状態行。モーダルが閉じていても書いておき、開いたときに読めるようにする
+function setAccessStatus(msg, color) {
+    const el = document.getElementById('unlock-status-msg');
+    if (!el) return;
+    el.textContent = msg || '';
+    el.style.color = color || '#666';
+}
+
+// ヘッダーのボタン：未認証なら入力モーダル、認証済みならログアウト確認
+function onAccessBtnClick() {
+    if (pricesVisible) { partnerLogout(); return; }
+    openUnlockModal();
+}
+
+function openUnlockModal() {
+    const t = UI_TEXT[currentLang];
+    const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+    set('unlock-title', t.unlockTitle);
+    set('unlock-lead', t.unlockLead);
+    set('unlock-help', t.unlockHelp);
+    set('unlock-btn-cancel', t.unlockCancel);
+    set('unlock-btn-submit', t.unlockSubmit);
+    const input = document.getElementById('unlock-code');
+    if (input) { input.placeholder = t.unlockPlaceholder; input.value = ''; }
+    const modal = document.getElementById('unlock-modal');
+    if (modal) modal.style.display = 'flex';
+    if (input) input.focus();
+}
+
+function closeUnlockModal() {
+    const modal = document.getElementById('unlock-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function submitAccessCode() {
+    const t = UI_TEXT[currentLang];
+    const input = document.getElementById('unlock-code');
+    const submitBtn = document.getElementById('unlock-btn-submit');
+    const code = (input?.value || '').trim();
+    if (!code) { setAccessStatus(t.unlockNg, '#c62828'); return; }
+    setAccessStatus(t.unlockSending, '#666');
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+        // Content-Type は付けない（preflight 回避・既存の register_user / send_order と同じ作法）
+        const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'unlock', code: code }) });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const result = await res.json();
+        if (!result || result.status !== 'ok' || !result.token) {
+            // コードが違う／失効している。理由は伝えない（総当たりの手掛かりを与えないため）
+            setAccessStatus(t.unlockNg, '#c62828');
+            return;
+        }
+        setAccess(result.token, result.partnerName || '');
+        setAccessStatus(t.unlockOk, '#2e7d32');
+        await fetchProducts(); // 価格つきで取り直す
+        setTimeout(closeUnlockModal, 900);
+    } catch (e) {
+        setAccessStatus(t.unlockErr, '#c62828');
+    } finally {
+        if (submitBtn) submitBtn.disabled = false;
+    }
+}
+
+async function partnerLogout() {
+    clearAccess();
+    setAccessStatus('', '#666');
+    await fetchProducts(); // 価格なしで取り直す
+}
+
 // 9. CATALOG EXPORT（商品リストのExcel(CSV)ダウンロード・クライアント側のみ）
 // CSVセル1つをExcel互換にエスケープ（カンマ・改行・"を含む値は""で囲み、内部の"は重ねる）
 function csvCell(v) {
@@ -561,6 +726,8 @@ function buildCatalogRows(products, includeOutOfStock) {
 
 // scope: 'current'=表示中の絞り込み結果 / 'all'=在庫のある全商品。BOM付きCSVをダウンロード（Excelで直接開ける）
 function exportCatalog(scope) {
+    // 未認証では価格列が空になるため出力自体を止める（ボタンも updateAccessUi で隠している）
+    if (!pricesVisible) { alert(UI_TEXT[currentLang].exportLocked); return; }
     const outOfStockView = (scope === 'current' && currentCategory === 'OUT_OF_STOCK');
     const products = (scope === 'all')
         ? allProducts.filter(p => (p.variants || []).reduce((s, v) => s + toNumber(v.stock, 0), 0) > 0)
@@ -586,6 +753,7 @@ function exportCatalog(scope) {
 
 // 10. INITIALIZE
 document.addEventListener('DOMContentLoaded', async () => {
+    loadPartnerName(); // 保存済みの取引先名を先に読む（fetchProducts のUI更新で使う）
     await fetchProducts();
     setLang(currentLang);
     const saved = localStorage.getItem('temp_cart');
