@@ -9,6 +9,13 @@ const TELEGRAM_LINK = 'https://t.me/SAKANAYAJAPON';
 const ACCESS_TOKEN_KEY = 'biz_access_token';
 const ACCESS_NAME_KEY = 'biz_partner_name';
 
+// Telegram Mini App からの自動ログイン（2026-09-22）
+// 法人向け Bot のメニュー／インラインボタンから開かれたときだけ動く。通常ブラウザでは一切動作しない
+const TG_SDK_URL = 'https://telegram.org/js/telegram-web-app.js';
+const TG_LAUNCH_HASH = (() => { try { return location.hash || ''; } catch (e) { return ''; } })();
+const IS_TELEGRAM_MINIAPP = /(^#|&)tgWebApp(Data|Platform|Version)=/.test(TG_LAUNCH_HASH);
+let tgLoginTried = false; // 失効時の無限ループ防止：1回の表示につき1度だけ試す
+
 let currentLang = (navigator.language || navigator.userLanguage || 'ja').startsWith('ja') ? 'jp' : 'en';
 let currentCategory = 'ALL';
 let allProducts = [];
@@ -34,6 +41,7 @@ const UI_TEXT = {
         unlockHelp: "コードをお持ちでないお客様は、Telegram からお気軽にお問い合わせください。",
         unlockSending: "確認中です…📡",
         unlockOk: "✅ 確認できました。価格を表示します。",
+        unlockOkTg: "✅ 確認できました。次回からは Telegram で開くだけで価格が表示されます。",
         unlockNg: "⚠️ コードを確認できませんでした。恐れ入りますが、もう一度お試しください。",
         unlockErr: "⚠️ 通信に失敗しました。通信環境をご確認のうえ、もう一度お試しください。",
         unlockExpired: "🔓 ログインの有効期限が切れました。恐れ入りますが、再度ログインしてください。",
@@ -64,6 +72,7 @@ const UI_TEXT = {
         unlockHelp: "Don't have a code yet? Please contact us on Telegram.",
         unlockSending: "Checking… 📡",
         unlockOk: "✅ Verified. Showing prices.",
+        unlockOkTg: "✅ Verified. Next time, prices will show automatically when you open this from Telegram.",
         unlockNg: "⚠️ We couldn't verify that code. Please check it and try again.",
         unlockErr: "⚠️ Connection failed. Please check your connection and try again.",
         unlockExpired: "🔓 Your login has expired. Please log in again.",
@@ -120,6 +129,61 @@ function loadPartnerName() {
     try { partnerName = localStorage.getItem(ACCESS_NAME_KEY) || ''; } catch (e) { partnerName = ''; }
 }
 
+// Telegram Mini App の SDK を動的に読み込む（通常ブラウザの表示速度に影響させないため index.html には置かない）。
+// onload / onerror / タイムアウトのいずれでも必ず resolve する
+function loadTelegramSdk(timeoutMs = 3000) {
+    return new Promise(resolve => {
+        if (!IS_TELEGRAM_MINIAPP) { resolve(false); return; }
+        try {
+            if (window.Telegram && window.Telegram.WebApp) { resolve(true); return; }
+        } catch (e) {}
+        let done = false;
+        const finish = ok => { if (done) return; done = true; clearTimeout(timer); resolve(ok); };
+        const timer = setTimeout(() => finish(false), timeoutMs);
+        try {
+            const el = document.createElement('script');
+            el.src = TG_SDK_URL;
+            el.async = true;
+            el.onload = () => finish(!!(window.Telegram && window.Telegram.WebApp));
+            el.onerror = () => finish(false);
+            (document.head || document.documentElement).appendChild(el);
+        } catch (e) {
+            finish(false);
+        }
+    });
+}
+// Telegram の initData（Bot トークンで署名された起動パラメータ）。SDK 優先、無ければ起動ハッシュから取る
+function getTelegramInitData() {
+    try {
+        const d = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData;
+        if (d) return d;
+    } catch (e) {}
+    try {
+        return new URLSearchParams(TG_LAUNCH_HASH.replace(/^#/, '')).get('tgWebAppData') || '';
+    } catch (e) {
+        return '';
+    }
+}
+// GAS（action='tg_login'）に initData を渡して署名検証＋取引先照合してもらい、通ればトークンを保存する。
+// 未紐付け・通信失敗・検証失敗はすべて false（画面は従来のログインボタンのまま。誤って成功表示しない）
+async function tryTelegramAutoLogin() {
+    if (!IS_TELEGRAM_MINIAPP || tgLoginTried) return false;
+    tgLoginTried = true;
+    const initData = getTelegramInitData();
+    if (!initData) return false;
+    try {
+        // Content-Type は付けない（preflight 回避・既存の unlock と同じ作法）
+        const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'tg_login', initData: initData }) });
+        if (!res.ok) return false;
+        const result = await res.json();
+        if (!result || result.status !== 'ok' || !result.token) return false;
+        setAccess(result.token, result.partnerName || '');
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
 // 応答に価格が実在するかで表示可否を決める。GAS と本ファイルのデプロイ順に依存しないための判定
 // （旧GAS＝全員に価格あり／新GAS＝未認証には価格なし）。防御はあくまで GAS 側にある
 function dataHasPrices(products) {
@@ -152,6 +216,8 @@ async function fetchProducts() {
         // （商品が1件も無い応答で誤って失効扱いにしないよう hasAnyVariant で守る）
         if (token && !pricesVisible && hasAnyVariant(allProducts)) {
             clearAccess();
+            // Telegram から開いている場合は一度だけ自動ログインを試し、通れば価格つきで取り直す
+            if (await tryTelegramAutoLogin()) return fetchProducts();
             setAccessStatus(UI_TEXT[currentLang].unlockExpired, '#c62828');
         }
         updateAccessUi();
@@ -653,8 +719,14 @@ async function submitAccessCode() {
     setAccessStatus(t.unlockSending, '#666');
     if (submitBtn) submitBtn.disabled = true;
     try {
+        const payload = { action: 'unlock', code: code };
+        // Telegram から開いている場合は initData を添える（GAS が unlock 成功時に chat_id を紐付ける）
+        if (IS_TELEGRAM_MINIAPP) {
+            const initData = getTelegramInitData();
+            if (initData) payload.initData = initData;
+        }
         // Content-Type は付けない（preflight 回避・既存の register_user / send_order と同じ作法）
-        const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'unlock', code: code }) });
+        const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const result = await res.json();
         if (!result || result.status !== 'ok' || !result.token) {
@@ -663,7 +735,7 @@ async function submitAccessCode() {
             return;
         }
         setAccess(result.token, result.partnerName || '');
-        setAccessStatus(t.unlockOk, '#2e7d32');
+        setAccessStatus(payload.initData ? t.unlockOkTg : t.unlockOk, '#2e7d32');
         await fetchProducts(); // 価格つきで取り直す
         setTimeout(closeUnlockModal, 900);
     } catch (e) {
@@ -754,6 +826,11 @@ function exportCatalog(scope) {
 // 10. INITIALIZE
 document.addEventListener('DOMContentLoaded', async () => {
     loadPartnerName(); // 保存済みの取引先名を先に読む（fetchProducts のUI更新で使う）
+    if (IS_TELEGRAM_MINIAPP) {
+        const sdkReady = await loadTelegramSdk();
+        if (sdkReady) { try { window.Telegram.WebApp.ready(); window.Telegram.WebApp.expand(); } catch (e) {} }
+        if (!getAccessToken()) await tryTelegramAutoLogin();
+    }
     await fetchProducts();
     setLang(currentLang);
     const saved = localStorage.getItem('temp_cart');
