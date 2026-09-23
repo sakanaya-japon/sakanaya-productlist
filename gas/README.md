@@ -17,7 +17,8 @@
 |---|---|
 | `自動注文管理ソフト` | **スクリプトの置き場所**。注文履歴・顧客情報。`access_codes` もここに作られる |
 | `gas/price-gating.gs` | 新規追加するファイル（トークンの発行・検証、コード管理、価格除去） |
-| `gas/doGet-doPost.gs` | 既存の doGet / doPost を置き換える完成版 |
+| `gas/doGet-doPost.gs` | 既存の doGet / doPost を置き換える完成版（本番では `IN&DN.gs` 内にある） |
+| `gas/telegram-login.gs` | Telegram Mini App からの自動ログイン（initData の署名検証・G列との照合） |
 | `web_stock` | 商品マスター。商品名・価格・在庫の入力元。スクリプトがIDで読みに行く |
 
 `access_codes` は `SpreadsheetApp.getActive()`、すなわちスクリプトが紐づく
@@ -94,6 +95,51 @@ revokeAccessCode('SJ-XXXX-XXXX');
 
 `access_codes` シートの `last_used_at` 列に最終ログイン日時が入る。
 長期間使われていないコードは失効させておくとよい。
+
+## Telegram からの自動ログイン（2026-09-22）
+
+法人向け Bot のメニューボタン／インラインボタンからカタログを開いた取引先を、
+コード入力なしでログイン済みにする。通常ブラウザで開いた場合は一切動作しない。
+
+```
+Telegram Bot ──web_app ボタン──→ カタログ（script.js）
+                                  起動ハッシュ tgWebAppData を検出
+                                  SDK を動的に読み込み、initData を取得
+                                  ──── action='tg_login' ────→ GAS（telegram-login.gs）
+                                                                Bot トークンで initData の署名を検証
+                                                                access_codes G列 telegram_chat_ids と照合
+                                  ←── 署名付きトークン ────────  issueToken_()（従来と同じ）
+```
+
+### 紐付けのされ方
+
+- 取引先が Telegram から開いたカタログでコードを1回入力すると自動で紐付く
+  （`doPost` の unlock 分岐が `linkTelegramAfterUnlock_` を呼ぶ）
+- 取引先が Bot に `/link SJ-XXXX-XXXX` を送っても紐付く（`TelegramMenu.gs`）
+- スタッフがエディタで `linkTelegramChatManually('SJ-XXXX-XXXX', 123456789)` を実行しても紐付く
+- 1つのコードに複数の chat_id（同じ店の複数スタッフ）をカンマ区切りで紐付けられる
+- 特定の人だけ外すときは `unlinkTelegramChat(chatId)`。コードごと止めるなら従来どおり `revokeAccessCode`
+
+### 導入時の確認事項
+
+1. スクリプトプロパティ `BOT_TOKEN`（法人専用 Bot を別に立てた場合は `MENU_BOT_TOKEN`）に、
+   カタログを開く Bot のトークンが入っていること
+2. `telegram-login.gs` を追加し、`doGet-doPost.gs` の内容で doPost を更新したうえで、
+   **ウェブアプリを新しいバージョンとして再デプロイする**（保存だけでは /exec の挙動は変わらない）
+3. Bot のボタンは通常の `url` ではなく **`web_app` 形式**でカタログの URL を指定すること。
+   通常リンクだと Telegram が起動ハッシュを付けないため、自動ログインは動かない
+4. 動作確認: 未紐付けのアカウントで開く → 従来のログインボタン → コード入力 →
+   「次回からは Telegram で開くだけで価格が表示されます」 → 閉じて再度開く → コード入力なしで価格が出る
+
+### 安全策
+
+- initData は Bot トークンで HMAC-SHA256 署名されているため、改ざん・なりすましはできない
+- `auth_date` が24時間より古い initData は拒否する（起動データの使い回し防止）
+- 検証に通っても未紐付けなら `status:'unlinked'` を返し、カタログは通常のログインボタンを出す
+- カタログ側は失効時の自動再ログインを1回の表示につき1度しか試さない（無限ループ防止）
+
+> `TelegramMenu.gs`（法人向け常設メニュー・Webhook 受信）と `partner-codes.gs`（コードの一括発行・配布）は
+> 本番プロジェクトにあるが、本リポジトリには未収録。
 
 ## 仕様
 
