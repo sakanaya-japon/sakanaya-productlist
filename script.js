@@ -1,761 +1,776 @@
-// 1. CONFIG & STATE
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbwgE8fOWPyXkr2WTZNIvH5G30ptWzQIK6DCO7kVK9x4b6RgSlHBY2wgmNwc42aA_WUOKA/exec'; // 2026-07-06 新ブック移行：新GASの/execに切替
-const TELEGRAM_API_URL = 'https://telegram-bot-729928920450.asia-northeast1.run.app/';
-const TELEGRAM_LINK = 'https://t.me/SAKANAYAJAPON';
+/* =========================================================
+   伊勢志摩水産物輸出促進協議会 LP script.js（日英切替対応版）
+   ---------------------------------------------------------
+   ★ 最初にここだけ設定 ★ Gmail作成後にアドレスを書き換え
+   ========================================================= */
+const CONTACT_EMAIL = "generalaffairs.isec@gmail.com"; // ← 変更してください
 
-// 取引先アクセス（価格の出し分け・2026-09-18）
-// 価格は GAS が「トークンを検証したうえで返す／返さない」を決める。ここでの pricesVisible は
-// 表示を切り替えるためだけの値であり、防御ではない（未認証なら価格はそもそも応答に含まれない）。
-const ACCESS_TOKEN_KEY = 'biz_access_token';
-const ACCESS_NAME_KEY = 'biz_partner_name';
+// 動的コンテンツ用データ（お知らせ・事業計画/報告）：初期化前参照を避けるため冒頭で宣言
+let newsData = [];
+const NEWS_VISIBLE = 5;   // お知らせの初期表示件数（これを変えると表示数が変わります）
+let newsExpanded = false; // 過去のお知らせを開いているか
+let docsData = [];
+let areaMarkers = []; // 志摩半島マップのピン
+let productData = null;   // 取り扱い海産物（data/products.json）
+let productFilter = "all"; // 現在選択中のカテゴリ
 
-let currentLang = (navigator.language || navigator.userLanguage || 'ja').startsWith('ja') ? 'jp' : 'en';
-let currentCategory = 'ALL';
-let allProducts = [];
-let cart = {};
-let currentClientOrderId = ''; // send_order の冪等キー（確認モーダルで採番→成功で破棄・設計§5-1）
-let lastFiltered = []; // 直近の絞り込み結果（Excelダウンロード「表示中」用）
-let catalogUpdateDate = ''; // カタログの更新日（ダウンロードファイル名用）
-let pricesVisible = false; // 直近の応答に価格が含まれていたか（＝価格を表示してよいか）
-let partnerName = ''; // 認証済み取引先の表示名（ヘッダー表示用）
+/* =========================================================
+   YouTube動画の埋め込み設定
+   ---------------------------------------------------------
+   動画を追加するときは、URL末尾の動画ID
+   （例 https://youtu.be/AbCdEf12345 → AbCdEf12345）を
+   下の配列に追加するだけです。1本なら1列、2本以上は
+   2列で「志摩からハノイへ」の下に表示されます。
+   空の配列 [] にすると何も表示されません。
+   ========================================================= */
+const YOUTUBE_VIDEO_IDS = [
+  "dSBWdKu2KIo",
+  "8258t9bHzDg",
+];
 
-// 2. UI TEXT
-const UI_TEXT = {
-    jp: {
-        cat_all: "全在庫商品", cat_kh: "🇰🇭 カンボジア産", cat_jp: "🇯🇵 日本産", origin_kh: "カンボジア産", origin_jp: "日本産", size_selectable: "サイズ選択可", noProducts: '該当商品なし', cat_frozen: "冷凍品",
-        cat_fillet: "鮮魚フィレ・セミドレス・ドレス・ホール", cat_oil: "調味料・油", cat_kitchen: "厨房用品", cat_vege: "野菜", cat_waiting: "入荷待ち", inquiry: "問い合わせ",
-        searchPlaceholder: "商品名で検索...", noticeTitle: "【お知らせ】クリック▲で詳細を閉じる",
-        orderBarLabel: "📋 ご注文内容", orderNote: "* 最終的な数量・重量は納品時に確定いたします",
-        exportCurrent: "⬇ 表示中をExcelへ", exportAll: "⬇ 全商品をExcelへ",
-        priceLocked: "取引先の方に表示", unlockBtn: "🔓 取引先ログイン", unlockedBtn: "✅ 取引先", logoutBtn: "ログアウト",
-        unlockTitle: "取引先ログイン",
-        unlockLead: "お渡ししている取引先コードをご入力ください。価格が表示されます。",
-        unlockPlaceholder: "取引先コード", unlockSubmit: "ログイン", unlockCancel: "キャンセル",
-        unlockHelp: "コードをお持ちでないお客様は、Telegram からお気軽にお問い合わせください。",
-        unlockSending: "確認中です…📡",
-        unlockOk: "✅ 確認できました。価格を表示します。",
-        unlockNg: "⚠️ コードを確認できませんでした。恐れ入りますが、もう一度お試しください。",
-        unlockErr: "⚠️ 通信に失敗しました。通信環境をご確認のうえ、もう一度お試しください。",
-        unlockExpired: "🔓 ログインの有効期限が切れました。恐れ入りますが、再度ログインしてください。",
-        exportLocked: "Excelへの出力は、取引先ログイン後にご利用いただけます。",
-        clearBtn: 'クリア', recommendTitle: "🔥 本日のおすすめ", noProducts: '該当商品なし',
-        stock: 'STOCK', stockLeft: '残り', size: 'サイズ', emptyCart: '商品が選択されていません。',
-        weightCalc: '重量計算', qtyCalc: '数量計算', labelNotes: 'メモ',
-        modalTitle: "新規登録",
-        labelShop: "店名",
-        labelStaff: "担当者名",
-        labelPhone: "電話番号",
-        btnCancel: "キャンセル",
-        btnRegister: "登録",
-        btnFirstOrder: "初めての方", btnRepeatOrder: "ご注文",
-        btnSubmitFirst: "登録案内を受け取る", btnSubmitRepeat: "注文する",
-                noticeBody:`・初めてのご注文の際には、必ず「初めての方」のボタンからご登録お願い致します。<br>・写真をクリックしていただきますと商品説明も見ていただけます。<br>・フィレからもご注文いただけますので、色々なお魚をぜひお試しください。`,
-        },
-        en: {
-        cat_all: "ALL of Stock", cat_kh: "🇰🇭 CAMBODIA", cat_jp: "🇯🇵 JAPAN", origin_kh: "CAMBODIA", origin_jp: "JAPAN", size_selectable: "Size Selection Available", noProducts: 'No products', cat_frozen: "FROZEN",
-        cat_fillet: "FILLET/DR/SD/WHOLE", cat_oil: "OIL & SEASONING", cat_kitchen: "KITCHEN", cat_vege: "VEGETABLES", cat_waiting: "OUT OF STOCK", inquiry: "INQUIRY",
-        searchPlaceholder: "Search...", noticeTitle: "【 NOTICE 】 Click for details",
-        orderBarLabel: "📋 Your Order", orderNote: "* Final price confirmed upon delivery",
-        exportCurrent: "⬇ This view to Excel", exportAll: "⬇ All items to Excel",
-        priceLocked: "Partners only", unlockBtn: "🔓 Partner login", unlockedBtn: "✅ Partner", logoutBtn: "Log out",
-        unlockTitle: "Partner login",
-        unlockLead: "Enter the partner code we issued to you to see prices.",
-        unlockPlaceholder: "Partner code", unlockSubmit: "Log in", unlockCancel: "Cancel",
-        unlockHelp: "Don't have a code yet? Please contact us on Telegram.",
-        unlockSending: "Checking… 📡",
-        unlockOk: "✅ Verified. Showing prices.",
-        unlockNg: "⚠️ We couldn't verify that code. Please check it and try again.",
-        unlockErr: "⚠️ Connection failed. Please check your connection and try again.",
-        unlockExpired: "🔓 Your login has expired. Please log in again.",
-        exportLocked: "Excel export is available after partner login.",
-        clearBtn: 'Clear', recommendTitle: "🔥 Recommendation", noProducts: 'No products',
-        stock: 'STOCK', stockLeft: 'Stock ', size: 'Size', emptyCart: 'Cart is empty.',
-        weightCalc: 'Weight', qtyCalc: 'Quantity', labelNotes: 'Notes',
-        modalTitle: "Registration",
-        labelShop: "Shop Name",
-        labelStaff: "Contact Person",
-        labelPhone: "Phone Number",
-        btnCancel: "Cancel",
-        btnRegister: "Register",
-        btnFirstOrder: "First Time", btnRepeatOrder: "Order",
-        btnSubmitFirst: "Get Guide", btnSubmitRepeat: "Order",
-                noticeBody:`- For your first order, please make sure to register via the "First Time" button.<br>- Click a product photo to see its description.<br>- Fillets are also available to order — please try a variety of fish.`
-    }
+/* =========================================================
+   メンバーカードのリンク設定
+   ---------------------------------------------------------
+   各メンバーのSNSやホームページを載せるときは、下の配列に
+   { label: "表示名", url: "https://..." } を追加するだけです。
+   個人アカウントの場合はラベルに（個人）を付けてください。
+   例：
+   inoue: [
+     { label: "船上からの発信（Instagram・個人）", url: "https://www.instagram.com/xxxx" },
+   ],
+   ========================================================= */
+const MEMBER_LINKS = {
+  katayama: [{ label: "安乗からの発信（Instagram・個人）", url: "https://www.instagram.com/marusei.8/" },],
+  inoue: [{ label: "志摩からの発信（Instagram・個人）", url: "https://www.instagram.com/kazumaru_sizima_/" },],
+  ishikawa: [],
+  hirooka: [],
+  metis: [],
+  katano: [],
+  mukai: [],
 };
 
-// 3. HELPERS
-function esc(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-function getProductName(p) { return currentLang === 'jp' ? (p.name_jp || p.name_en || '') : (p.name_en || p.name_jp || ''); }
-function getProductComment(p) { return currentLang === 'jp' ? (p.comment_jp || p.comment_en || '') : (p.comment_en || p.comment_jp || ''); }
-function getVariantName(v) { return currentLang === 'jp' ? (v.variant_name_jp || v.variant_name_en || '') : (v.variant_name_en || v.variant_name_jp || ''); }
-function getCategoryValue(p) { return (p.category_id || p.category || '').trim(); }
-function toNumber(v, f = 0) { const n = Number(v); return Number.isFinite(n) ? n : f; }
-function getCalcClass(p) { return (p.variants || []).some(v => String(v.price_unit).toLowerCase() === 'kg') ? 'weight' : 'qty'; }
-function getCalcLabel(p) { return getCalcClass(p) === 'weight' ? UI_TEXT[currentLang].weightCalc : UI_TEXT[currentLang].qtyCalc; }
+/* =========================================================
+   多言語辞書
+   ・HTML側の data-i18n（テキスト）/ data-i18n-html（<br>等を含む）
+     / data-i18n-ph（placeholder）/ data-i18n-content（meta）に対応。
+   ・日本語はHTMLに直書きされているため、辞書はENのみ持ち、
+     JA復帰時はページ読込時に退避した原文へ戻します。
+   ========================================================= */
+const I18N_EN = {
+  "meta.title": "Iseshima Seafood Export Council | From Japan's sacred larder to the world.",
+  "meta.desc": "Fishermen, wholesalers, processors and exporters of Ise-Shima, Japan, working as one council to deliver Shima's seafood to Hanoi, Vietnam.",
 
-// 取引先トークンの保管。プライベートモード等で localStorage が使えない環境でも
-// 例外で全体が止まらないようにする（その場合はセッション中だけ価格が見える状態になる）
-let accessTokenFallback = '';
-function getAccessToken() {
-    try { return localStorage.getItem(ACCESS_TOKEN_KEY) || accessTokenFallback || ''; }
-    catch (e) { return accessTokenFallback || ''; }
-}
-function setAccess(token, name) {
-    accessTokenFallback = token || '';
-    partnerName = name || '';
-    try {
-        localStorage.setItem(ACCESS_TOKEN_KEY, token || '');
-        localStorage.setItem(ACCESS_NAME_KEY, name || '');
-    } catch (e) {}
-}
-function clearAccess() {
-    accessTokenFallback = '';
-    partnerName = '';
-    try {
-        localStorage.removeItem(ACCESS_TOKEN_KEY);
-        localStorage.removeItem(ACCESS_NAME_KEY);
-    } catch (e) {}
-}
-function loadPartnerName() {
-    try { partnerName = localStorage.getItem(ACCESS_NAME_KEY) || ''; } catch (e) { partnerName = ''; }
+  "brand.name": "Iseshima Seafood Export Council",
+  "brand.sub": "伊勢志摩水産物輸出促進協議会",
+
+  "nav.about": "About",
+  "nav.products": "Our Seafood",
+  "nav.route": "Shima to Hanoi",
+  "nav.members": "Members",
+  "nav.news": "News",
+  "nav.contact": "Contact",
+
+  "hero.eyebrow": "Shima, Mie Prefecture — from the ports of Anori, Nakiri and Wagu",
+  "hero.title": "Iseshima Seafood<br>Export Council",
+  "hero.lead": "Fishermen, wholesalers, freezing &amp; processing, seaweed, and export trade.<br>Five partners of the Ise-Shima sea working as one,<br>bringing the pride of the day's catch to tables across the sea.",
+  "hero.cta1": "See the route from Shima to Hanoi",
+  "hero.cta2": "Talk to us about trade",
+  "hero.cert.sqf": "SQF (GFSI-recognized)",
+  "hero.tategaki": "From Japan's sacred larder, to the world.",
+
+  "ports.caption": "Our home waters",
+  "ports.p1": "Anori",
+  "ports.p1n": "Port of Anori fugu — wholesale and processing under one roof",
+  "ports.p2": "Nakiri",
+  "ports.p2n": "Beneath the Daio Lighthouse — a town that lives with bonito",
+  "ports.p3": "Wagu",
+  "ports.p3n": "Home of the ama divers — Ise-ebi and abalone waters",
+
+  "about.title": "Five crafts,<br class=\"sp-only\">bound by one sea.",
+  "about.lead": "The Iseshima Seafood Export Council was founded by five partners of Shima: <strong>fishermen, a wholesaler, a freezing &amp; processing plant, a seaweed house, and an export trading company</strong>. Each of us brings a craft and a pride honed on our own sea, and together we carry the entire chain — catching, selecting, processing and delivering — as one. Two internationally certified plants (HACCP, SQF, JFS-B) and our own retail channels in Southeast Asia: we export the blessings of the Ise-Shima sea together with their freshness and trust.",
+  "about.f1t": "Founded",
+  "about.f1d": "July 2026",
+  "about.f2t": "Head office",
+  "about.f2d": "Anori, Ago-cho, Shima City, Mie, Japan",
+  "about.f3t": "Members",
+  "about.f3d": "4 companies + fishermen (Shima / Osaka)",
+  "about.f4t": "First target market",
+  "about.f4d": "Hanoi, Vietnam",
+
+  "products.title": "Caught, selected, crafted.",
+  "products.lead": "From fresh whole fish through primary, secondary and prepared processing to aquaculture. Five partners, each with their own role, delivering in the form your kitchen needs.",
+  "products.c1t": "Fresh Fish",
+  "products.c1d": "Seasonal fish caught by pole-and-line, set-net and gill-net. Selected on the day, by the eyes that know this sea best.",
+  "products.c1tag": "Captain of F/V Dai-ichi Kazumaru and partner fishermen",
+  "products.c2t": "Frozen & Processed",
+  "products.c2d": "From fillets to prepared foods at a HACCP / SQF certified plant. Freshness sealed in, in formats ready for your kitchen.",
+  "products.c2tag": "Shinsei Suisan & Iseshima Reito (on-site integrated processing)",
+  "products.c3t": "Seaweed (Hijiki, Wakame & Aosa)",
+  "products.c3d": "Selection and sterilization refined over 150 years. From a JFS-B certified plant, the aroma of Ise-Shima's shores to the world.",
+  "products.c3tag": "Kaneu Foods (Shijima / Ugata plant)",
+  "products.c4t": "Oysters",
+  "products.c4d": "Raised in the calm inlets of Ise-Shima, exemplified by Matoya Bay. Delivering the wisdom of aquaculture to the next market.",
+  "products.c4tag": "In partnership with Shima's oyster farmers (expanding)",
+
+  "route.title": "Morning at a Shima port. Two days later, a table in Hanoi.",
+  "route.lead": "Collection, processing and freezing are completed on a single site; from our base minutes from Haneda Airport, Hanoi is about six hours by direct flight. A relay of freshness is the blueprint of this route.",
+  "route.s1t": "Landing",
+  "route.s1d": "The day's catch from the ports of Anori, Nakiri and Wagu.",
+  "route.s2t": "Processing & Freezing",
+  "route.s2d": "Same-day processing at a HACCP / SQF certified plant, right by the port.",
+  "route.s3t": "Airfreight from Haneda",
+  "route.s3d": "From our export base near the airport — about 6 hours by direct flight.",
+  "route.s4t": "To tables in Hanoi",
+  "route.s4d": "Our own local sales channels carry it to the very last plate.",
+
+  "why.title": "Trust is built on paper and on the ground.",
+  "why.s1t": "Two internationally certified plants",
+  "why.s1d": "HACCP, SQF (GFSI-recognized) and JFS-B. We meet destination standards facility-first.",
+  "why.s2t": "A supply chain on one site",
+  "why.s2d": "The processing plant sits inside the wholesaler's premises. From collection to frozen storage with zero transfer — freshness protected.",
+  "why.s3t": "Our own channels in Southeast Asia",
+  "why.s3d": "Export experience to Vietnam and Cambodia, with our own local retail. We trade within earshot of the market.",
+  "why.s4t": "Small lots, wide variety",
+  "why.s4d": "Fillets or prepared foods — flexible supply matched to your menu.",
+
+  "members.title": "The five partners",
+  "members.m1r": "Chair / Wholesale",
+  "members.m1n": "Shinsei Suisan Co., Ltd.",
+  "members.m1d": "The discerning eye and trade network of Ise-Shima (Anori, Shima)",
+  "members.m2r": "Director / Freezing & Processing",
+  "members.m2n": "Iseshima Reito Co., Ltd.",
+  "members.m2d": "HACCP / SQF certified plant; exports to Hong Kong, Thailand and Singapore",
+  "members.m3r": "Vice-chair / Fisherman",
+  "members.m3n": "Captain, F/V Dai-ichi Kazumaru",
+  "members.m3d": "The Shijima sea and its network of fishermen",
+  "members.m4r": "Director / Seaweed",
+  "members.m4n": "Kaneu Foods Co., Ltd.",
+  "members.m4d": "Founded 150 years ago; JFS-B certified plant (Shijima / Ugata)",
+  "members.m5r": "Secretariat / Export",
+  "members.m5n": "METIS Co., Ltd.",
+  "members.m5d": "Exports to Vietnam & Cambodia; export base minutes from Haneda",
+  "members.adv": "Adviser: Ayumu Katano (FISK JAPAN) / In cooperation with Mie Prefecture, Shima City and JETRO Mie",
+  "members.m1p": "Katsuhito Katayama",
+  "members.m2p": "Takamasa Ishikawa",
+  "members.m3p": "Kazu Inoue",
+  "members.m4p": "Tatsukazu Hirooka",
+  "members.m5p": "Yoshihisa Mitsunobu",
+  "members.m6p": "Ayumu Katano",
+  "members.m6r": "Adviser",
+  "members.m6n": "FISK JAPAN",
+  "members.m6d": "Expert guidance on seafood export and global fisheries",
+  "members.m7r": "Auditor",
+  "members.m7p": "Shingo Mukai",
+  "members.m7n": "Nanbu Kyuso Co., Ltd.",
+  "members.m7d": "A logistics specialist auditing the council independently of its members",
+  "products.loading": "Loading…",
+
+  "members.support": "Working in cooperation with Mie Prefecture, Shima City and JETRO Mie.",
+
+  "news.title": "News",
+  "news.tag1": "Notice",
+  "news.tag2": "Business",
+  "news.tag3": "Upcoming",
+  "news.n1": "The Iseshima Seafood Export Council has been established.",
+  "news.n2": "First shipment of Shima's used fishing vessels has departed (giving retired fishermen's boats a second life).",
+  "news.n3": "Facility registration for Vietnam and international certification work begins.",
+
+  "docs.title": "Documents",
+  "docs.lead": "The council's articles and internal rules, along with its business plans and reports, are available as PDFs.",
+  "docs.g1": "Rules & Regulations",
+  "docs.g2": "Business Plans & Reports",
+  "docs.loading": "Loading…",
+  "docs.d1": "Articles of Association",
+  "docs.d2": "Organizational Rules",
+  "docs.d3": "Accounting Rules",
+  "news.loading": "Loading…",
+
+  "area.title": "The Shima Peninsula & Our Ports",
+  "area.lead": "Cradled by Ise-Shima National Park, the Shima Peninsula is where sheltered ria inlets meet the Kuroshio Current. Our seafood comes from three ports open to the Pacific — Anori, Nakiri and Wagu — and from Matoya Bay.",
+  "area.note": "Select a pin to see each location.",
+
+  "contact.title": "Trade, visits and media inquiries",
+  "contact.lead": "Overseas buyers, restaurants and retailers, press and government — we would love to hear from you.",
+  "form.name": "Your name",
+  "form.req": "Required",
+  "form.req2": "Required",
+  "form.req3": "Required",
+  "form.name.ph": "e.g. John Smith",
+  "form.org": "Company / Organization",
+  "form.org.ph": "e.g. Hanoi Fine Foods Co., Ltd.",
+  "form.mail": "Your email",
+  "form.mail.ph": "e.g. you@example.com",
+  "form.body": "Your inquiry",
+  "form.body.ph": "e.g. We are looking to source fresh fish and frozen fillets for Japanese restaurants in Hanoi.",
+  "form.note": "Pressing the button opens your email app with the message pre-filled.",
+  "form.submit": "Send us an email",
+  "form.alt": "If your email app does not open, please write to us directly:",
+
+  "footer.name": "Iseshima Seafood Export Council",
+  "footer.sub": "伊勢志摩水産物輸出促進協議会",
+  "footer.addr": "Anori, Ago-cho, Shima City, Mie, Japan (c/o Shinsei Suisan Co., Ltd.)",
+};
+
+/* ---------------------------------------------------------
+   言語切替の実装
+   ・読込時に日本語原文（HTML直書き）を退避 → JA復帰に使用
+   ・選択言語は localStorage に保存（使えない環境でも動作）
+--------------------------------------------------------- */
+const LANG_KEY = "iseshima_lp_lang";
+const jaStore = { text: new Map(), html: new Map(), ph: new Map(), content: new Map() };
+
+// 原文退避
+document.querySelectorAll("[data-i18n]").forEach((el) => jaStore.text.set(el, el.textContent));
+document.querySelectorAll("[data-i18n-html]").forEach((el) => jaStore.html.set(el, el.innerHTML));
+document.querySelectorAll("[data-i18n-ph]").forEach((el) => jaStore.ph.set(el, el.getAttribute("placeholder") || ""));
+document.querySelectorAll("[data-i18n-content]").forEach((el) => jaStore.content.set(el, el.getAttribute("content") || ""));
+
+let currentLang = "ja";
+
+function applyLang(lang) {
+  currentLang = lang === "en" ? "en" : "ja";
+  document.documentElement.lang = currentLang;
+
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const key = el.getAttribute("data-i18n");
+    el.textContent = currentLang === "en" ? (I18N_EN[key] ?? jaStore.text.get(el)) : jaStore.text.get(el);
+  });
+  document.querySelectorAll("[data-i18n-html]").forEach((el) => {
+    const key = el.getAttribute("data-i18n-html");
+    el.innerHTML = currentLang === "en" ? (I18N_EN[key] ?? jaStore.html.get(el)) : jaStore.html.get(el);
+  });
+  document.querySelectorAll("[data-i18n-ph]").forEach((el) => {
+    const key = el.getAttribute("data-i18n-ph");
+    el.setAttribute("placeholder", currentLang === "en" ? (I18N_EN[key] ?? jaStore.ph.get(el)) : jaStore.ph.get(el));
+  });
+  document.querySelectorAll("[data-i18n-content]").forEach((el) => {
+    const key = el.getAttribute("data-i18n-content");
+    el.setAttribute("content", currentLang === "en" ? (I18N_EN[key] ?? jaStore.content.get(el)) : jaStore.content.get(el));
+  });
+
+  // <title>（data-i18nを付けてあるが、明示的にも更新）
+  document.title = currentLang === "en" ? I18N_EN["meta.title"] : jaStore.text.get(document.querySelector("title"));
+
+  // 切替ボタンの表示状態
+  document.querySelectorAll(".lang-opt").forEach((opt) => {
+    opt.classList.toggle("is-current", opt.getAttribute("data-lang-opt") === currentLang);
+  });
+
+  // 選択を記憶（プライベートモード等で失敗しても無視）
+  try { localStorage.setItem(LANG_KEY, currentLang); } catch (_) {}
+
+  // 動的生成部（お知らせ・事業計画/報告）を再描画
+  if (typeof renderNews === "function") renderNews();
+  if (typeof renderDocs === "function") renderDocs();
+  if (typeof refreshAreaMarkers === "function") refreshAreaMarkers();
+  if (typeof renderProductTabs === "function") renderProductTabs();
+  if (typeof renderProducts === "function") renderProducts();
 }
 
-// 応答に価格が実在するかで表示可否を決める。GAS と本ファイルのデプロイ順に依存しないための判定
-// （旧GAS＝全員に価格あり／新GAS＝未認証には価格なし）。防御はあくまで GAS 側にある
-function dataHasPrices(products) {
-    return (products || []).some(p => (p.variants || []).some(v => v && v.price_usd !== undefined && v.price_usd !== null && v.price_usd !== ''));
-}
-function hasAnyVariant(products) {
-    return (products || []).some(p => (p.variants || []).length > 0);
-}
+// 初期言語：保存値 → ブラウザ言語 → 日本語
+(function initLang() {
+  let saved = null;
+  try { saved = localStorage.getItem(LANG_KEY); } catch (_) {}
+  const preferEn = (navigator.language || "").toLowerCase().startsWith("en");
+  applyLang(saved || (preferEn ? "en" : "ja"));
+})();
 
-// 4. CORE FUNCTIONS
-async function fetchProducts() {
-    const token = getAccessToken();
-    try {
-        // トークンは GAS が検証し、通ったときだけ価格つきの応答を返す
-        const res = await fetch(token ? `${GAS_URL}?token=${encodeURIComponent(token)}` : GAS_URL);
-        const data = await res.json();
-        catalogUpdateDate = data.updateDate || '';
-        if (data.updateDate && document.getElementById('update-date')) {
-            document.getElementById('update-date').textContent = 'UPDATE: ' + data.updateDate;
-        }
-        const raw = Array.isArray(data.products) ? data.products : [];
-        allProducts = raw.map(p => {
-            const vs = Array.isArray(p.variants) ? p.variants : [];
-            const sortedVs = vs.sort((a, b) => toNumber(a.sort_order, 9999) - toNumber(b.sort_order, 9999));
-            return { ...p, variants: sortedVs };
-        }).filter(p => (p.name_jp || p.name_en || '').trim() !== '')
-          .sort((a, b) => toNumber(a.sort_order, 9999) - toNumber(b.sort_order, 9999));
-        pricesVisible = dataHasPrices(allProducts);
-        // トークンを送ったのに価格が返らない＝失効・取消・コード削除。保存分を破棄して再ログインを促す
-        // （商品が1件も無い応答で誤って失効扱いにしないよう hasAnyVariant で守る）
-        if (token && !pricesVisible && hasAnyVariant(allProducts)) {
-            clearAccess();
-            setAccessStatus(UI_TEXT[currentLang].unlockExpired, '#c62828');
-        }
-        updateAccessUi();
-        applyFilters();
-    } catch (e) {
-        const pc = document.getElementById('product-container');
-        if (pc) pc.innerHTML = `<p>⚠️ Load Failed: ${esc(e.message)}</p>`;
-    }
+const langSwitch = document.getElementById("langSwitch");
+if (langSwitch) {
+  langSwitch.addEventListener("click", () => applyLang(currentLang === "ja" ? "en" : "ja"));
 }
 
-function filterCategory(cat, btn) {
-    currentCategory = cat;
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-    if (btn) btn.classList.add('active');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    applyFilters();
+/* ---------------------------------------------------------
+   ヘッダー：スクロールで背景切替
+--------------------------------------------------------- */
+const siteHeader = document.getElementById("siteHeader");
+function updateHeader() {
+  if (!siteHeader) return;
+  siteHeader.classList.toggle("is-solid", window.scrollY > 40);
 }
+window.addEventListener("scroll", updateHeader, { passive: true });
+updateHeader();
 
-function applyFilters() {
-    const search = (document.getElementById('search-input')?.value || '').toLowerCase().trim();
-    const filtered = allProducts.filter(p => {
-        const totalStock = (p.variants || []).reduce((sum, v) => {
-            const val = Number(v.stock);
-            return sum + (isNaN(val) ? 0 : val);
-        }, 0);
-
-        const countryVal = String(p.country || '').trim().toUpperCase();
-
-        let matchesCat = false;
-        if (currentCategory === 'OUT_OF_STOCK') {
-            matchesCat = (totalStock <= 0);
-        } else if (currentCategory === 'COUNTRY_KH') {
-            matchesCat = (countryVal === 'CAMBODIA' && totalStock > 0);
-        } else if (currentCategory === 'COUNTRY_JP') {
-            matchesCat = (countryVal === 'JAPAN' && totalStock > 0);
-        } else {
-            // 鮮魚一匹（FRESH-WHOLE）はフィレ系カテゴリへ統合表示（2026-08-05）。データ側のカテゴリ値は変更しない
-            const catMatch = (currentCategory === 'ALL' || getCategoryValue(p) === currentCategory ||
-                (currentCategory === 'FRESH-FILLET/DR/SD' && getCategoryValue(p) === 'FRESH-WHOLE'));
-            matchesCat = catMatch && (totalStock > 0);
-        }
-        const matchesSearch = !search || 
-            getProductName(p).toLowerCase().includes(search) || 
-            getProductComment(p).toLowerCase().includes(search);
-        return matchesCat && matchesSearch;
+/* ---------------------------------------------------------
+   モバイルナビ
+--------------------------------------------------------- */
+const navToggle = document.getElementById("navToggle");
+const globalNav = document.getElementById("globalNav");
+if (navToggle && globalNav) {
+  navToggle.addEventListener("click", () => {
+    const open = globalNav.classList.toggle("is-open");
+    navToggle.classList.toggle("is-open", open);
+    navToggle.setAttribute("aria-expanded", String(open));
+  });
+  globalNav.querySelectorAll("a").forEach((a) => {
+    a.addEventListener("click", () => {
+      globalNav.classList.remove("is-open");
+      navToggle.classList.remove("is-open");
+      navToggle.setAttribute("aria-expanded", "false");
     });
-    lastFiltered = filtered; // Excelダウンロード「表示中」が参照する
-    displayProducts(filtered);
+  });
 }
 
-// 5. DISPLAY & RENDER
-function displayProducts(products) {
-    const pc = document.getElementById('product-container');
-    const rs = document.getElementById('recommend-section');
-    const rc = document.getElementById('recommend-container');
-    if (!pc) return;
+/* ---------------------------------------------------------
+   スクロール出現
+--------------------------------------------------------- */
+const revealObserver =
+  "IntersectionObserver" in window
+    ? new IntersectionObserver(
+        (entries, observer) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add("is-visible");
+              observer.unobserve(entry.target);
+            }
+          });
+        },
+        { rootMargin: "0px 0px -10% 0px", threshold: 0.1 }
+      )
+    : null;
 
-    const recs = products.filter(p => toNumber(p.recommend_today, 0) === 1);
-    const norms = products.filter(p => toNumber(p.recommend_today, 0) !== 1);
-
-    if (rc) rc.innerHTML = recs.map(buildCard).join('');
-    if (rs) recs.length > 0 ? rs.classList.remove('hidden') : rs.classList.add('hidden');
-    
-    pc.innerHTML = norms.length === 0 && recs.length === 0 
-        ? `<p style="text-align:center;padding:30px;">${UI_TEXT[currentLang].noProducts}</p>` 
-        : norms.map(buildCard).join('');
+function observeReveal(el) {
+  if (revealObserver) revealObserver.observe(el);
+  else el.classList.add("is-visible");
 }
 
-function buildCard(p) {
-    const t = UI_TEXT[currentLang];
-    const pid = esc(p.product_id);
-    const name = esc(getProductName(p));
+document.querySelectorAll(".reveal").forEach(observeReveal);
 
-    let originHTML = '';
-    const countryVal = String(p.country || '').trim().toUpperCase(); 
-    if (countryVal === 'CAMBODIA') {
-        originHTML = `<div class="origin-tag"><span class="origin-text">${t.origin_kh}</span><img src="images/kh-flag.png" class="country-flag" alt="KH"></div>`;
-    } else if (countryVal === 'JAPAN') {
-        originHTML = `<div class="origin-tag"><span class="origin-text">${t.origin_jp}</span><img src="images/jp-flag.png" class="country-flag" alt="JP"></div>`;
-    }
-    
-    const vsHTML = (p.variants || [])
-        .filter(v => {
-            const stockNum = toNumber(v.stock, 0);
-            return currentCategory === 'OUT_OF_STOCK' ? stockNum <= 0 : stockNum > 0;
-        })
-        .map(v => {
-            const vid = esc(v.variant_id);
-            const qty = cart[vid]?.qty || 0;
-            const stockNum = toNumber(v.stock, 0);
-            const isOut = stockNum <= 0;
-            const atMax = qty + 1 > stockNum; // 次の＋でストック超過なら無効化（端数在庫でもガード判定と一致・2026-08-05）
-            // 表記: 「名称：$価格/kg|/pic」（区切りは：・単位はバリアントのprice_unit基準で kg→/kg・それ以外→/pic）
-            // 未認証（＝GASが価格を返していない）ときは価格の位置に取引先向けの案内を出す
-            const unitSuffix = String(v.price_unit).toLowerCase() === 'kg' ? '/kg' : '/pic';
-            const sep = currentLang === 'jp' ? '：' : ': ';
-            const priceText = pricesVisible
-                ? `$${toNumber(v.price_usd).toFixed(2)}${unitSuffix}`
-                : `<span class="price-locked">${t.priceLocked}</span>`;
-            return `
-                <div class="variant-row">
-                    <button class="variant-select-btn" onclick="selectVariantImage('${pid}', '${esc(v.image_variant)}', '${esc(p.image_main)}', this)">
-                        ${esc(getVariantName(v))}${sep}${priceText}
-                    </button>
-                    <div class="variant-qty-wrap">
-                        <button class="qty-btn" onclick="changeCartQty('${vid}', -1)">−</button>
-                        <span class="variant-qty">${qty}</span>
-                        <button class="qty-btn" onclick="changeCartQty('${vid}', 1)" ${(isOut || atMax) ? 'disabled' : ''}>＋</button>
-                        ${stockNum > 0 ? `<span class="variant-stock">${t.stockLeft}${stockNum}</span>` : ''}
-                    </div>
-                </div>`;
-        }).join('');
-
-    return `
-    <div class="card" data-category="${esc(getCategoryValue(p))}">
-        <div class="img-wrapper">
-            ${p.image_main ? `<img id="product-image-${pid}" src="${esc(p.image_main)}" alt="${name}" onclick="openModal(this.src, '${pid}')">` : `<div class="img-placeholder">🐟</div>`}
-        </div>
-        <div class="info">
-            <div class="product-title-row">
-                <h3>[${esc(p.code || '---')}] ${name}</h3>
-                ${originHTML}
-            </div>
-            <div class="size-calc-row">
-                <p class="size-detail">${esc(p.size || '')}</p>
-                <span class="calc-mini ${getCalcClass(p)}">${getCalcLabel(p)}</span>
-            </div>
-            <div class="variant-list">${vsHTML}</div>
-        </div>
-    </div>`;
+/* ---------------------------------------------------------
+   航路ステップの点灯
+--------------------------------------------------------- */
+const routeSteps = document.querySelectorAll(".route-step");
+if ("IntersectionObserver" in window && routeSteps.length > 0) {
+  const stepObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        entry.target.classList.toggle("is-active", entry.isIntersecting);
+      });
+    },
+    { rootMargin: "-30% 0px -30% 0px", threshold: 0 }
+  );
+  routeSteps.forEach((el) => stepObserver.observe(el));
 }
 
-// 6. CART LOGIC
-function getVariantStock(vid) {
-    for (const p of allProducts) {
-        const v = (p.variants || []).find(x => x.variant_id === vid);
-        if (v) return toNumber(v.stock, 0);
-    }
-    return Infinity; // 商品リストに見つからない場合は従来挙動（ガードなし）
+/* ---------------------------------------------------------
+   お問い合わせ（mailto方式）
+   件名・本文は表示中の言語で組み立てます。
+--------------------------------------------------------- */
+const contactForm = document.getElementById("contactForm");
+
+function buildMailto(name, org, email, body) {
+  const en = currentLang === "en";
+  const subject = en
+    ? `[Inquiry] ${name} (${org || "Individual"})`
+    : `【お問い合わせ】${name}様（${org || "個人"}）`;
+  const lines = en
+    ? [
+        "To: Iseshima Seafood Export Council",
+        "",
+        `Name: ${name}`,
+        `Company / Organization: ${org || "(not provided)"}`,
+        `Email: ${email}`,
+        "",
+        "--- Inquiry ---",
+        body,
+        "",
+        "* Composed from the website contact form.",
+      ]
+    : [
+        "伊勢志摩水産物輸出促進協議会 御中",
+        "",
+        `お名前：${name}`,
+        `会社名・団体名：${org || "（未記入）"}`,
+        `ご連絡先メール：${email}`,
+        "",
+        "── ご相談内容 ──",
+        body,
+        "",
+        "※本メールはWebサイトのお問い合わせフォームから作成されました。",
+      ];
+  return (
+    "mailto:" + encodeURIComponent(CONTACT_EMAIL) +
+    "?subject=" + encodeURIComponent(subject) +
+    "&body=" + encodeURIComponent(lines.join("\n"))
+  );
 }
 
-function changeCartQty(vid, delta) {
-    let targetVariant = null, targetProduct = null;
-    for (const p of allProducts) {
-        const v = p.variants.find(v => v.variant_id === vid);
-        if (v) { targetVariant = v; targetProduct = p; break; }
-    }
-    if (!targetVariant) return;
-    // ストック数以上には増やせない（商品カード・カート画面共通のガード・2026-08-05）
-    if (delta > 0 && (cart[vid]?.qty || 0) + delta > toNumber(targetVariant.stock, 0)) return;
-    if (!cart[vid]) {
-        if (delta <= 0) return;
-        // コード基準（2026-08-01 光信さん裁定・2026-08-10 凍結解除）：variant_id の V_右側＝魚ポチ/FISHCODEと
-        // 同粒度のバリアントコード（例 V_BC210LL → BC210LL）を最優先。無い/形式外は variant_code → 商品コードへ
-        // フォールバック（従来挙動）。形式検証：GAS側パーサが確実に抽出できる英数字3文字以上のみ採用
-        // （V_P_BC825 等の不正形式は従来どおり商品コードで発行＝IN行落ち退行の防止・レビュー5巡目）
-        const vRaw = (typeof vid === 'string' && vid.indexOf('V_') === 0) ? vid.slice(2) : '';
-        const vCodeFromId = /^[A-Z0-9]{3,}$/.test(vRaw) ? vRaw : '';
-        cart[vid] = { variant_id: vid, qty: 0, price_usd: toNumber(targetVariant.price_usd), product_name_jp: targetProduct.name_jp, product_name_en: targetProduct.name_en, variant_name_jp: targetVariant.variant_name_jp || "", variant_name_en: targetVariant.variant_name_en || "", code: vCodeFromId || targetVariant.variant_code || targetProduct.code };
-    }
-    cart[vid].qty += delta;
-    if (cart[vid].qty <= 0) delete cart[vid];
-    applyFilters(); 
-    renderCart();
-}
+if (contactForm) {
+  contactForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const nameInput = document.getElementById("cfName");
+    const orgInput  = document.getElementById("cfOrg");
+    const mailInput = document.getElementById("cfMail");
+    const bodyInput = document.getElementById("cfBody");
+    const note      = document.getElementById("formNote");
 
-function renderCart() {
-    const t = UI_TEXT[currentLang];
-    const items = Object.values(cart);
-    const panel = document.getElementById('cart-panel');
-    if (!panel) return;
-    const currentNotes = document.getElementById('cart-notes')?.value || "";
-    const cartTitle = currentLang === 'jp' ? "ご注文内容" : "Your Order";
-    const notesTitle = currentLang === 'jp' ? "メモ" : "Notes";
-
-    let listContent = items.length === 0 ? `<p style="text-align:center; padding:30px; color:#999; margin:0;">${t.emptyCart}</p>` : items.map(item => `
-        <div class="cart-item" style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #eee;">
-            <div style="flex:1; text-align:left;">
-                 <strong style="font-size:0.9rem; display:block;">[${esc(item.code || '---')}] ${esc(currentLang === 'jp' ? item.product_name_jp : item.product_name_en)}</strong>
-                 <span style="font-size:0.85rem; color:#555; display:block;">${esc(currentLang === 'jp' ? item.variant_name_jp : item.variant_name_en)}</span>
-                 <span style="font-size:0.85rem; color:#666;"> × ${item.qty}</span>
-            </div>
-            <div style="display:flex; gap:5px;">
-                <button class="qty-btn" onclick="changeCartQty('${item.variant_id}', -1)">−</button>
-                <button class="qty-btn" onclick="changeCartQty('${item.variant_id}', 1)" ${item.qty + 1 > getVariantStock(item.variant_id) ? 'disabled' : ''}>＋</button>
-            </div>
-        </div>`).join('');
-
-    panel.innerHTML = `
-        <div style="background:#333; color:#fff; padding:12px 15px; display:flex; justify-content:space-between; align-items:center;">
-            <h2 style="margin:0; font-size:1rem; color:#fff;">🛒 ${cartTitle}</h2>
-            <button onclick="closeCartPanel()" style="color:#fff; border:none; background:none; font-size:1.5rem; cursor:pointer; line-height:1;">×</button>
-        </div>
-        <div style="flex:1; overflow-y:auto; padding:15px; display:flex; flex-direction:column;">
-            ${listContent}
-            <div style="margin-top:auto; padding-top:15px; text-align:left;">
-                <label style="display:block; font-weight:bold; margin-bottom:5px; font-size:0.85rem;">${notesTitle}</label>
-                <textarea id="cart-notes" style="width:100%; height:60px; border:1px solid #ccc; border-radius:4px; padding:5px; box-sizing:border-box;">${esc(currentNotes)}</textarea>
-            </div>
-        </div>
-        <div style="padding:15px; background:#f9f9f9; border-top:1px solid #ddd;">
-            <div style="display:flex; gap:8px;">
-                <button onclick="submitFirstOrder()" style="flex:1; padding:12px 5px; font-size:0.75rem; font-weight:bold; border-radius:6px; background:#666; color:#fff; border:none;">${currentLang === 'jp' ? '初めての方' : 'First Time'}</button>
-                <button onclick="showOrderCheckModal()" style="flex:1; padding:12px 5px; font-size:0.75rem; font-weight:bold; border-radius:6px; background:#333; color:#fff; border:none;">${currentLang === 'jp' ? 'ご注文' : 'Order'}</button>
-                <button onclick="clearCart()" style="padding:12px 10px; font-size:0.75rem; border-radius:6px; background:#eee; border:none;">${currentLang === 'jp' ? 'クリア' : 'Clear'}</button>
-            </div>
-        </div>`;
-    const badge = document.getElementById('cart-count-badge');
-    if (badge) badge.textContent = items.reduce((s, i) => s + i.qty, 0);
-}
-
-function clearCart() { cart = {}; currentClientOrderId = ''; applyFilters(); renderCart(); closeCartPanel(); }
-
-function setLang(lang) {
-    currentLang = lang;
-    const t = UI_TEXT[lang];
-    document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.id === 'lang-' + lang));
-    const mapping = { 'cat-all': t.cat_all, 'cat-kh': t.cat_kh, 'cat-jp': t.cat_jp,'cat-frozen': t.cat_frozen, 'cat-fillet': t.cat_fillet, 'cat-oil': t.cat_oil, 'cat-kitchen': t.cat_kitchen, 'cat-vege': t.cat_vege, 'cat-waiting': t.cat_waiting, 'inquiry-text': t.inquiry, 'search-input': t.searchPlaceholder, 'notice-summary-text': t.noticeTitle, 'notice-body-content': t.noticeBody, 'recommend-title': t.recommendTitle, 'export-current-btn': t.exportCurrent, 'export-all-btn': t.exportAll };
-    for (let id in mapping) {
-        const el = document.getElementById(id);
-        if (el) {
-            if (id === 'notice-body-content') el.innerHTML = mapping[id];
-            else if (el.tagName === 'INPUT') el.placeholder = mapping[id];
-            else el.textContent = mapping[id];
-        }
-    }
-    updateAccessUi(); // ログインボタンの表記も言語に追従させる
-    applyFilters(); renderCart();
-}
-
-// 7. UI CONTROL
-function toggleCartPanel() { document.getElementById('cart-panel')?.classList.toggle('show'); }
-function closeCartPanel() { document.getElementById('cart-panel')?.classList.remove('show'); }
-// 写真ポップアップ。pid があれば商品説明（comment_jp/en・表示中の言語）を写真の下に表示（2026-08-01）
-function openModal(src, pid) {
-    const m = document.getElementById('image-modal'), i = document.getElementById('modal-img');
-    if (!m || !i) return;
-    i.src = src;
-    const cap = document.getElementById('modal-caption');
-    if (cap) {
-        const p = pid ? allProducts.find(x => String(x.product_id) === String(pid)) : null;
-        const text = p ? getProductComment(p) : '';
-        cap.textContent = text;
-        cap.style.display = text ? '' : 'none'; // 説明なしの商品は従来どおり写真のみ
-    }
-    m.style.display = 'flex';
-}
-function closeModal() { document.getElementById('image-modal').style.display = 'none'; }
-function selectVariantImage(pid, vImg, fImg, btn) {
-    const img = document.getElementById(`product-image-${pid}`);
-    if (img) img.src = vImg && vImg.trim() !== '' ? vImg : fImg;
-    if (btn) { btn.closest('.variant-list').querySelectorAll('.variant-select-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); }
-}
-
-// 8. ORDER LOGIC
-function submitFirstOrder() {
-    const t = UI_TEXT[currentLang];
-    document.getElementById('modal-title').textContent = t.modalTitle;
-    document.getElementById('label-shop').textContent = t.labelShop;
-    document.getElementById('label-staff').textContent = t.labelStaff;
-    document.getElementById('label-phone').textContent = t.labelPhone;
-    document.getElementById('btn-cancel').textContent = t.btnCancel;
-    document.getElementById('btn-submit').textContent = t.btnRegister;
-    setRegStatus('', '#666'); // 前回の成否メッセージを消してから開く
-    document.getElementById('first-time-modal').style.display = 'flex';
-}
-function closeFirstTimeModal() { document.getElementById('first-time-modal').style.display = 'none'; }
-
-// 登録モーダルのインライン状態行（#reg-status-msg）を色付きで更新（H-5・デザイン§4-3）
-function setRegStatus(msg, color) {
-    const el = document.getElementById('reg-status-msg');
-    if (!el) return;
-    el.textContent = msg || '';
-    el.style.color = color || '#666';
-}
-
-async function processFirstTimeRegistration() {
-    const s = document.getElementById('reg-shop-name')?.value.trim(), n = document.getElementById('reg-staff-name')?.value.trim(), p = document.getElementById('reg-phone')?.value.trim();
-    const submitBtn = document.getElementById('btn-submit');
-    // 入力不足：状態行に案内してモーダル保持（デザイン§3-4）
-    if (!p || !s || !n) {
-        setRegStatus(currentLang === 'jp'
-            ? '⚠️ 店名・担当者名・電話番号をすべてご入力ください。'
-            : '⚠️ Please fill in shop name, contact person, and phone number.', '#c62828');
-        return;
-    }
-    // 送信中表示＋二重送信防止
-    setRegStatus(currentLang === 'jp' ? '送信中です…📡' : 'Sending… 📡', '#666');
-    if (submitBtn) submitBtn.disabled = true;
-    try {
-        // H-5: no-cors廃止→通常fetchで応答検証。Content-Type は付けない（preflight回避・設計§3-2）
-        const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'register_user', phone: p, username: s, firstName: n })});
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const result = await res.json();
-        if (!result || result.status !== 'ok') throw new Error((result && result.message) || 'register failed');
-        // 成功：Telegramへは飛ばさず、選んだカートへ戻って注文を続けてもらう（導線A・2026-07-08）。
-        // Telegram連携は注文完了モーダルのボタンから（アプリ内ブラウザでカートが空に見える問題の解消）。
-        setRegStatus(currentLang === 'jp'
-            ? '✅ ご登録を受け付けました！\nこのままご注文いただけます🛒（Telegram通知はご注文後にご案内します）'
-            : '✅ Registration received!\nYou can order right away 🛒 (We\'ll set up Telegram notifications after your order)', '#2e7d32');
-        localStorage.setItem('user_phone', p); // 注文確認と注文後のTelegram連携ボタンで再利用
-        setTimeout(() => {
-            closeFirstTimeModal();
-            document.getElementById('cart-panel')?.classList.add('show'); // 選んだカートに戻す
-        }, 1500);
-    } catch (e) {
-        // 失敗：入力値を保持し再試行可能に（カートも保持）
-        setRegStatus(currentLang === 'jp'
-            ? '⚠️ ご登録に失敗しました。通信環境をご確認のうえ、もう一度お試しください。'
-            : '⚠️ Registration failed. Please check your connection and try again.', '#c62828');
-    } finally {
-        if (submitBtn) submitBtn.disabled = false;
-    }
-}
-
-// send_order の冪等キー生成（UUID優先・非対応環境は nonce にフォールバック・設計§5-1）
-function genClientOrderId() {
-    if (window.crypto && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
-    return 'w-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
-}
-
-function showOrderCheckModal() {
-    const items = Object.values(cart);
-    if (items.length === 0) { alert(currentLang === 'jp' ? "カートが空です" : "Cart is empty"); return; }
-    const jp = currentLang === 'jp';
-    // 確認セッションの冪等キーを採番（未採番時のみ＝再試行では同一キーを維持し二重起票を防ぐ）
-    if (!currentClientOrderId) currentClientOrderId = genClientOrderId();
-    // 見出し・リード文・ラベル・補助文・ボタン（デザイン§3-1）
-    document.getElementById('check-title').textContent = jp ? 'ご注文内容の確認' : 'Confirm Your Order';
-    document.getElementById('check-lead').textContent = jp
-        ? '以下の内容で承ります。よろしければ「確定する」を押してください🐟'
-        : 'Please review your order below, then tap "Confirm" 🐟';
-    document.getElementById('check-items-label').textContent = jp ? '🛒 ご注文品' : '🛒 Your Items';
-    document.getElementById('check-phone-label').textContent = jp ? '📱 ご連絡先（電話番号）' : '📱 Phone Number';
-    document.getElementById('check-phone-note').textContent = jp
-        ? '未登録でもご注文いただけます。ご登録済みの方は同じ番号をご入力ください。'
-        : "Orders are accepted even if you're not registered yet. If registered, use the same number.";
-    document.getElementById('check-btn-back').textContent = jp ? '戻る' : 'Back';
-    document.getElementById('check-btn-confirm').textContent = jp ? '確定する' : 'Confirm';
-    // ご注文品の明細（カート各品を反復・明細表記はデザイン§3-1）
-    document.getElementById('check-order-summary').innerHTML = items.map(item => {
-        const nm = esc(jp ? item.product_name_jp : item.product_name_en);
-        const vn = esc(jp ? item.variant_name_jp : item.variant_name_en);
-        const qtyText = jp ? `× ${item.qty}点` : `× ${item.qty}`;
-        return `<div style="padding:4px 0; border-bottom:1px solid #eee;">[${esc(item.code || '---')}] ${nm} ${vn} ${qtyText}</div>`;
-    }).join('');
-    document.getElementById('order-check-modal').style.display = 'flex';
-    const saved = localStorage.getItem('user_phone');
-    if (saved) document.getElementById('check-phone').value = saved;
-}
-
-// 注文結果モーダルを構成（成功=登録済み/未登録・失敗を1枚で切替・デザイン§3-2/§3-3）
-function showOrderResult(kind, orderNo) {
-    const jp = currentLang === 'jp';
-    const icon = document.getElementById('result-icon');
-    const title = document.getElementById('result-title');
-    const noEl = document.getElementById('result-orderno');
-    const body = document.getElementById('result-body');
-    const primary = document.getElementById('result-btn-primary');
-    const secondary = document.getElementById('result-btn-secondary');
-    const hasNo = !!(orderNo && String(orderNo).trim());
-
-    // 送信失敗（⚠️は本物の失敗のみ・番号非表示・カート保持）
-    if (kind === 'failed') {
-        icon.textContent = '⚠️';
-        title.textContent = jp ? '送信できませんでした' : "Couldn't Send";
-        noEl.textContent = ''; noEl.style.display = 'none';
-        body.textContent = jp
-            ? '通信環境をご確認のうえ、もう一度お試しください。\nご注文内容（カート）はそのまま残っています🛒'
-            : 'Please check your connection and try again.\nYour cart has been kept 🛒';
-        secondary.style.display = '';
-        secondary.textContent = jp ? '閉じる' : 'Close';
-        secondary.onclick = closeOrderResult; // 閉じるのみ（カート保持）
-        primary.textContent = jp ? 'もう一度試す' : 'Retry';
-        primary.onclick = () => { closeOrderResult(); document.getElementById('order-check-modal').style.display = 'flex'; };
-        document.getElementById('order-result-modal').style.display = 'flex';
-        return;
-    }
-
-    // 受付完了（登録済み/未登録とも ✅・拒否面にしない・デザイン§3-2）
-    icon.textContent = '✅';
-    title.textContent = jp ? 'ご注文を承りました' : 'Order Received';
-    noEl.textContent = hasNo ? (jp ? `ご注文番号：${orderNo}` : `Order No.: ${orderNo}`) : '';
-    noEl.style.display = hasNo ? '' : 'none';
-
-    if (!hasNo) {
-        // orderNo 欠落（万一 GAS 旧版）：W番号なしの汎用成功にフォールバック（設計§3-1）
-        body.textContent = jp ? 'ご注文を承りました。' : 'Your order has been received.';
-        secondary.style.display = 'none';
-        primary.textContent = jp ? '閉じる' : 'Close';
-        primary.onclick = closeOrderResult; // カートは受付完了時に破棄済み（M-3）
-    } else if (kind === 'registered') {
-        body.textContent = jp
-            ? 'Telegramに確認メッセージをお送りしました📩\n担当者が内容を確認し、追ってご連絡いたします🐟'
-            : "We've sent a confirmation to your Telegram 📩\nOur staff will review it and get back to you 🐟";
-        secondary.style.display = 'none';
-        primary.textContent = jp ? '閉じる' : 'Close';
-        primary.onclick = closeOrderResult; // カートは受付完了時に破棄済み（M-3）
-    } else { // unregistered（拒否しない：受付完了＋Telegram連携はここから・導線A 2026-07-08）
-        body.textContent = jp
-            ? 'ご注文はしっかりお受けしました✅\n\n📱 下のボタンからTelegramを開くと、ご注文の確認メッセージをTelegramで受け取れるようになります（今回のご注文はこのまま進みます）。'
-            : 'Your order has been received ✅\n\n📱 Tap below to open Telegram and get your order confirmations there (this order is already being processed).';
-        secondary.style.display = '';
-        secondary.textContent = jp ? '閉じる' : 'Close';
-        secondary.onclick = closeOrderResult; // カートは受付完了時に破棄済み（M-3）
-        primary.textContent = jp ? '📱 Telegramで確認を受け取る' : '📱 Get updates on Telegram';
-        primary.onclick = () => { // 注文受付済み＝カート破棄済みなのでページを離れても安全（M-3）
-            const ph = (localStorage.getItem('user_phone') || '').replace(/\D/g, '');
-            closeOrderResult();
-            window.open(ph ? `https://t.me/sakanaya_bot?start=${ph}` : 'https://t.me/sakanaya_bot', '_blank');
-        };
-    }
-    document.getElementById('order-result-modal').style.display = 'flex';
-}
-function closeOrderResult() { document.getElementById('order-result-modal').style.display = 'none'; }
-
-async function finalizeOrderProcess() {
-    const p = document.getElementById('check-phone')?.value.trim(), n = document.getElementById('cart-notes')?.value.trim(), items = Object.values(cart);
-    if (!p) { alert(currentLang === 'jp' ? "電話番号を入力してください。" : "Please enter your phone number."); return; }
-    document.getElementById('order-check-modal').style.display = 'none';
-    localStorage.setItem('user_phone', p);
-    // 冪等キー：確認モーダルで採番済みを使う（未採番なら生成）＝再送の二重起票防止（設計§5-1）
-    if (!currentClientOrderId) currentClientOrderId = genClientOrderId();
-    let orderData = '【New Order】\n';
-    items.forEach(i => { orderData += `${i.code || '---'} ${currentLang === 'jp' ? i.product_name_jp : i.product_name_en} ${currentLang === 'jp' ? i.variant_name_jp : i.variant_name_en} x ${i.qty}点\n`; });
-    try {
-        // spreadsheetId/targetGroupId は送らない（0-5/0-6クローズ）。Content-Type 未指定で preflight 回避（設計§3-2）
-        const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'send_order', phone: p, orderData: orderData, notes: n, clientOrderId: currentClientOrderId })});
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const result = await res.json();
-        // status==="error" のみ失敗扱い。旧応答 status==="unregistered" は拒否せず受付完了へ倒す（拒否アラート廃止）
-        if (result && result.status === 'error') throw new Error(result.message || 'server error');
-        // 新応答 {status:"ok", orderNo, registered}。registered!==true は未登録として案内付き受付完了に
-        const registered = !!(result && result.registered === true);
-        showOrderResult(registered ? 'registered' : 'unregistered', result && result.orderNo);
-        // 受付完了した時点でカート・冪等キーを破棄＝登録有無に関わらず別W行の二重注文を防ぐ（M-3・clearCart が currentClientOrderId も空に）
-        clearCart();
-    } catch (e) {
-        // 通信失敗/サーバエラー：偽の成功を出さずカート保持で失敗モーダル（H-1・デザイン§3-3）
-        showOrderResult('failed', '');
-    }
-}
-
-// 8-B. 取引先ログイン（価格の出し分け・2026-09-18）
-// コードの正否とトークンの発行・検証はすべて GAS 側で行う。ここは入力と表示だけを担う。
-
-// ヘッダーのログインボタン表記と、Excel出力ボタンの表示可否をまとめて更新
-function updateAccessUi() {
-    const t = UI_TEXT[currentLang];
-    const btn = document.getElementById('access-btn');
-    if (btn) {
-        btn.textContent = pricesVisible ? (partnerName ? `✅ ${partnerName}` : t.unlockedBtn) : t.unlockBtn;
-        btn.title = pricesVisible ? t.logoutBtn : t.unlockTitle;
-    }
-    const area = document.getElementById('export-area');
-    if (area) area.classList.toggle('is-visible', pricesVisible);
-}
-
-// ログインモーダルの状態行。モーダルが閉じていても書いておき、開いたときに読めるようにする
-function setAccessStatus(msg, color) {
-    const el = document.getElementById('unlock-status-msg');
-    if (!el) return;
-    el.textContent = msg || '';
-    el.style.color = color || '#666';
-}
-
-// ヘッダーのボタン：未認証なら入力モーダル、認証済みならログアウト確認
-function onAccessBtnClick() {
-    if (pricesVisible) { partnerLogout(); return; }
-    openUnlockModal();
-}
-
-function openUnlockModal() {
-    const t = UI_TEXT[currentLang];
-    const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
-    set('unlock-title', t.unlockTitle);
-    set('unlock-lead', t.unlockLead);
-    set('unlock-help', t.unlockHelp);
-    set('unlock-btn-cancel', t.unlockCancel);
-    set('unlock-btn-submit', t.unlockSubmit);
-    const input = document.getElementById('unlock-code');
-    if (input) { input.placeholder = t.unlockPlaceholder; input.value = ''; }
-    const modal = document.getElementById('unlock-modal');
-    if (modal) modal.style.display = 'flex';
-    if (input) input.focus();
-}
-
-function closeUnlockModal() {
-    const modal = document.getElementById('unlock-modal');
-    if (modal) modal.style.display = 'none';
-}
-
-async function submitAccessCode() {
-    const t = UI_TEXT[currentLang];
-    const input = document.getElementById('unlock-code');
-    const submitBtn = document.getElementById('unlock-btn-submit');
-    const code = (input?.value || '').trim();
-    if (!code) { setAccessStatus(t.unlockNg, '#c62828'); return; }
-    setAccessStatus(t.unlockSending, '#666');
-    if (submitBtn) submitBtn.disabled = true;
-    try {
-        // Content-Type は付けない（preflight 回避・既存の register_user / send_order と同じ作法）
-        const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'unlock', code: code }) });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const result = await res.json();
-        if (!result || result.status !== 'ok' || !result.token) {
-            // コードが違う／失効している。理由は伝えない（総当たりの手掛かりを与えないため）
-            setAccessStatus(t.unlockNg, '#c62828');
-            return;
-        }
-        setAccess(result.token, result.partnerName || '');
-        setAccessStatus(t.unlockOk, '#2e7d32');
-        await fetchProducts(); // 価格つきで取り直す
-        setTimeout(closeUnlockModal, 900);
-    } catch (e) {
-        setAccessStatus(t.unlockErr, '#c62828');
-    } finally {
-        if (submitBtn) submitBtn.disabled = false;
-    }
-}
-
-async function partnerLogout() {
-    clearAccess();
-    setAccessStatus('', '#666');
-    await fetchProducts(); // 価格なしで取り直す
-}
-
-// 9. CATALOG EXPORT（商品リストのExcel(CSV)ダウンロード・クライアント側のみ）
-// CSVセル1つをExcel互換にエスケープ（カンマ・改行・"を含む値は""で囲み、内部の"は重ねる）
-function csvCell(v) {
-    const s = String(v == null ? '' : v);
-    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-}
-
-// Excel数式解釈ガード（テキスト列のみに適用・2026-08-01）
-// 先頭が = + - @ TAB CR だとExcelが数式扱いし #NAME? 化け・数式実行の恐れ → ' を前置して文字列固定
-function csvGuard(v) {
-    const s = String(v == null ? '' : v);
-    return /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
-}
-
-// 商品配列 → CSVの行配列（見出し＋規格ごとに1行）。表示中の言語で出力
-function buildCatalogRows(products, includeOutOfStock) {
-    const jp = currentLang === 'jp';
-    const header = jp
-        ? ['コード', '商品名', '原産国', 'サイズ', '規格', '価格(USD)', '単位', '在庫']
-        : ['Code', 'Product Name', 'Origin', 'Size', 'Variant', 'Price(USD)', 'Unit', 'Stock'];
-    const rows = [header];
-    products.forEach(p => {
-        const name = getProductName(p);
-        const cc = String(p.country || '').trim().toUpperCase();
-        const origin = cc === 'CAMBODIA' ? (jp ? 'カンボジア産' : 'CAMBODIA')
-                     : cc === 'JAPAN' ? (jp ? '日本産' : 'JAPAN') : '';
-        (p.variants || [])
-            .filter(v => includeOutOfStock ? toNumber(v.stock, 0) <= 0 : toNumber(v.stock, 0) > 0)
-            .forEach(v => {
-                // テキスト6列はcsvGuardで数式解釈を防止。価格・在庫は数値生成のため対象外（数値性を保つ）
-                rows.push([
-                    csvGuard(p.code || ''),
-                    csvGuard(name),
-                    csvGuard(origin),
-                    csvGuard(p.size || ''),
-                    csvGuard(getVariantName(v)),
-                    toNumber(v.price_usd).toFixed(2),
-                    csvGuard(v.price_unit || ''),
-                    toNumber(v.stock, 0)
-                ]);
-            });
+    let hasError = false;
+    [nameInput, mailInput, bodyInput].forEach((input) => {
+      const empty = input.value.trim() === "";
+      input.classList.toggle("is-error", empty);
+      if (empty) hasError = true;
     });
-    return rows;
-}
-
-// scope: 'current'=表示中の絞り込み結果 / 'all'=在庫のある全商品。BOM付きCSVをダウンロード（Excelで直接開ける）
-function exportCatalog(scope) {
-    // 未認証では価格列が空になるため出力自体を止める（ボタンも updateAccessUi で隠している）
-    if (!pricesVisible) { alert(UI_TEXT[currentLang].exportLocked); return; }
-    const outOfStockView = (scope === 'current' && currentCategory === 'OUT_OF_STOCK');
-    const products = (scope === 'all')
-        ? allProducts.filter(p => (p.variants || []).reduce((s, v) => s + toNumber(v.stock, 0), 0) > 0)
-        : lastFiltered;
-    const rows = buildCatalogRows(products, outOfStockView);
-    if (rows.length <= 1) {
-        alert(currentLang === 'jp' ? '出力できる商品がありません。' : 'No products to export.');
-        return;
+    const mailValue = mailInput.value.trim();
+    if (mailValue !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mailValue)) {
+      mailInput.classList.add("is-error");
+      hasError = true;
     }
-    const csv = rows.map(r => r.map(csvCell).join(',')).join('\r\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-    const datePart = (catalogUpdateDate || '').replace(/[^0-9A-Za-z]/g, '') || 'latest';
-    const fname = `SAKANAYA_PRODUCTLIST_${datePart}.csv`;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fname;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    if (hasError) {
+      if (note) note.textContent = currentLang === "en"
+        ? "Please check the highlighted fields (required / email format)."
+        : "赤枠の項目をご確認ください（必須項目・メール形式）。";
+      return;
+    }
+    if (note) note.textContent = currentLang === "en"
+      ? "Opening your email app… (if nothing opens, use the address below)"
+      : "メール作成画面を開いています…（開かない場合は下のアドレスへ直接ご連絡ください）";
+
+    window.location.href = buildMailto(
+      nameInput.value.trim(), orgInput.value.trim(), mailValue, bodyInput.value.trim()
+    );
+  });
+
+  contactForm.querySelectorAll("input, textarea").forEach((input) => {
+    input.addEventListener("input", () => input.classList.remove("is-error"));
+  });
 }
 
-// 10. INITIALIZE
-document.addEventListener('DOMContentLoaded', async () => {
-    loadPartnerName(); // 保存済みの取引先名を先に読む（fetchProducts のUI更新で使う）
-    await fetchProducts();
-    setLang(currentLang);
-    const saved = localStorage.getItem('temp_cart');
-    if (saved) { try { Object.assign(cart, JSON.parse(saved)); renderCart(); localStorage.removeItem('temp_cart'); } catch (e) {} }
-});
+/* ---------------------------------------------------------
+   フォールバックリンク＆年
+--------------------------------------------------------- */
+const mailFallback = document.getElementById("mailFallback");
+if (mailFallback) {
+  mailFallback.href = "mailto:" + CONTACT_EMAIL;
+  mailFallback.textContent = CONTACT_EMAIL;
+}
+const yearEl = document.getElementById("year");
+if (yearEl) yearEl.textContent = String(new Date().getFullYear());
+
+/* =========================================================
+   お知らせ／事業計画・報告の自動生成
+   ---------------------------------------------------------
+   ・お知らせ本文は  data/news.json     を編集するだけで更新できます。
+   ・事業計画/報告は data/documents.json を編集し、
+     PDFを docs/ に置くだけで一覧に追加されます（HTMLの編集は不要）。
+   ・番号ルール：事業計画=P-YYMMDD／事業報告=R-YYMMDD（YYMMDD=承認日）。
+   ========================================================= */
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])
+  );
+}
+
+function renderNews() {
+  const list = document.getElementById("newsList");
+  if (!list) return;
+  if (!newsData.length) {
+    list.innerHTML =
+      '<li class="news-empty">' +
+      (currentLang === "en" ? "No news yet." : "お知らせはまだありません。") +
+      "</li>";
+    return;
+  }
+  const total = newsData.length;
+  const shown = newsExpanded ? newsData : newsData.slice(0, NEWS_VISIBLE);
+  list.innerHTML = shown
+    .map((n) => {
+      const tag = currentLang === "en" ? n.tag_en || n.tag_ja : n.tag_ja;
+      const title = currentLang === "en" ? n.title_en || n.title_ja : n.title_ja;
+      const body = currentLang === "en" ? n.body_en || n.body_ja : n.body_ja;
+      // 写真（photo）が指定されていればサムネイルを表示。画像が無ければ自動で消える
+      const thumb = n.photo
+        ? '<figure class="news-thumb"><img src="' + esc(n.photo) + '" alt="' +
+          esc(title || body || "") + '" loading="lazy" ' +
+          "onerror=\"this.closest('.news-thumb').remove()\"></figure>"
+        : "";
+      return (
+        '<li class="reveal' + (n.photo ? " has-thumb" : "") + '"><time datetime="' +
+        esc(n.datetime || "") +
+        '">' +
+        esc(n.date || "") +
+        '</time>' +
+        (tag ? '<span class="news-tag">' + esc(tag) + "</span>" : "") +
+        thumb +
+        '<div class="news-body">' +
+        (title ? '<h3 class="news-title">' + esc(title) + "</h3>" : "") +
+        (body ? "<p>" + esc(body) + "</p>" : "") +
+        "</div></li>"
+      );
+    })
+    .join("");
+  list.querySelectorAll(".reveal").forEach(observeReveal);
+
+  // 6件目以降がある場合のみ、開閉ボタンを表示
+  const btnBox = document.getElementById("newsMore");
+  if (btnBox) {
+    if (total <= NEWS_VISIBLE) {
+      btnBox.innerHTML = "";
+    } else {
+      const rest = total - NEWS_VISIBLE;
+      const label = newsExpanded
+        ? (currentLang === "en" ? "Show less" : "閉じる")
+        : (currentLang === "en"
+            ? "View past news (" + rest + ")"
+            : "過去のお知らせを見る（" + rest + "件）");
+      btnBox.innerHTML =
+        '<button type="button" class="news-more-btn' + (newsExpanded ? " is-open" : "") +
+        '" id="newsMoreBtn">' + esc(label) + "</button>";
+      const btn = document.getElementById("newsMoreBtn");
+      btn.addEventListener("click", () => {
+        newsExpanded = !newsExpanded;
+        renderNews();
+        // 閉じたときは一覧の先頭が見えるように戻す
+        if (!newsExpanded) {
+          const sec = document.getElementById("news");
+          if (sec) sec.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      });
+    }
+  }
+}
+
+function renderDocs() {
+  const list = document.getElementById("plansList");
+  if (!list) return;
+  if (!docsData.length) {
+    list.innerHTML =
+      '<li class="news-empty">' +
+      (currentLang === "en" ? "No documents yet." : "資料はまだありません。") +
+      "</li>";
+    return;
+  }
+  // 番号の日付部分（新しい順）で並べ替え
+  const sorted = docsData
+    .slice()
+    .sort((a, b) => String(b.no).slice(2).localeCompare(String(a.no).slice(2)));
+  list.innerHTML = sorted
+    .map((d) => {
+      const isReport = d.type === "report" || /^R-/.test(d.no || "");
+      const cls = isReport ? "is-report" : "is-plan";
+      const title = currentLang === "en" ? d.title_en || d.title_ja : d.title_ja;
+      return (
+        '<li class="reveal"><a href="' +
+        esc(d.file) +
+        '" target="_blank" rel="noopener">' +
+        '<span class="docs-no ' + cls + '">' + esc(d.no) + "</span>" +
+        "<span>" + esc(title) +
+        (d.date ? '<span class="docs-date">' + esc(d.date) + "</span>" : "") +
+        "</span>" +
+        '<span class="docs-type">PDF</span></a></li>'
+      );
+    })
+    .join("");
+  list.querySelectorAll(".reveal").forEach(observeReveal);
+}
+
+/* ---------------------------------------------------------
+   取り扱い海産物：カテゴリ別の描画
+   ---------------------------------------------------------
+   商品の追加・変更は data/products.json を編集するだけです。
+   （このファイルを触る必要はありません）
+--------------------------------------------------------- */
+const PRODUCT_ICONS = {
+  fish: '<svg viewBox="0 0 64 64"><path d="M8 32c10-12 26-14 38-6l10-8-3 12 3 12-10-8c-12 8-28 6-38-6z" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"/><circle cx="18" cy="30" r="2.2" fill="currentColor"/></svg>',
+  snow: '<svg viewBox="0 0 64 64"><path d="M32 8v48M12 20l40 24M52 20L12 44M32 8l-6 8M32 8l6 8M32 56l-6-8M32 56l6-8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
+  pot: '<svg viewBox="0 0 64 64"><path d="M10 24h44v18a10 10 0 0 1-10 10H20a10 10 0 0 1-10-10V24z" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round"/><path d="M6 30h4M54 30h4M24 16c0-4 4-4 4-8M36 16c0-4 4-4 4-8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  wave: '<svg viewBox="0 0 64 64"><path d="M20 56c0-14-6-18-4-30M32 56c0-18-4-22 0-40M44 56c0-14 6-18 4-30" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>',
+};
+
+function renderProductTabs() {
+  const box = document.getElementById("productTabs");
+  if (!box || !productData) return;
+  const cats = productData.categories || [];
+  const all = currentLang === "en" ? "All" : "すべて";
+  const btns = [{ id: "all", label: all }].concat(
+    cats.map((c) => ({ id: c.id, label: currentLang === "en" ? c.name_en : c.name_ja }))
+  );
+  box.innerHTML = btns.map((b) =>
+    '<button type="button" class="product-tab' + (b.id === productFilter ? " is-active" : "") +
+    '" data-cat="' + b.id + '">' + esc(b.label) + "</button>"
+  ).join("");
+  box.querySelectorAll(".product-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      productFilter = btn.dataset.cat;
+      renderProductTabs();
+      renderProducts();
+    });
+  });
+}
+
+function renderProducts() {
+  const grid = document.getElementById("productGrid");
+  if (!grid || !productData) return;
+  const cats = {};
+  (productData.categories || []).forEach((c) => { cats[c.id] = c; });
+  const catsOf = (it) => (Array.isArray(it.category) ? it.category : [it.category]).filter(Boolean);
+  const items = (productData.items || []).filter(
+    (it) => productFilter === "all" || catsOf(it).indexOf(productFilter) !== -1
+  );
+  if (!items.length) {
+    grid.innerHTML = '<p class="news-empty">' +
+      (currentLang === "en" ? "No items in this category." : "このカテゴリの商品はまだありません。") + "</p>";
+    return;
+  }
+  grid.innerHTML = items.map((it) => {
+    const myCats = catsOf(it).map((id) => cats[id]).filter(Boolean);
+    const first = myCats[0] || {};
+    const name = currentLang === "en" ? (it.name_en || it.name_ja) : it.name_ja;
+    const desc = currentLang === "en" ? (it.desc_en || it.desc_ja) : it.desc_ja;
+    const member = currentLang === "en" ? (it.member_en || it.member_ja) : it.member_ja;
+    const badges = myCats
+      .map((c) => '<span class="product-cat">' + esc(currentLang === "en" ? c.name_en : c.name_ja) + "</span>")
+      .join("");
+    const icon = PRODUCT_ICONS[first.icon] || PRODUCT_ICONS.fish;
+    return '<article class="product-card reveal">' +
+      (it.photo
+        ? '<figure class="product-photo"><img src="' + esc(it.photo) + '" alt="' + esc(name) +
+          '" loading="lazy" onerror="this.closest(\'.product-photo\').remove()"></figure>'
+        : "") +
+      (badges ? '<div class="product-cats">' + badges + "</div>" : "") +
+      '<div class="product-head"><div class="product-icon" aria-hidden="true">' + icon + "</div>" +
+      "<h3>" + esc(name) + "</h3></div>" +
+      "<p>" + esc(desc) + "</p>" +
+      (member ? '<span class="product-tag">' + esc(member) + "</span>" : "") +
+      "</article>";
+  }).join("");
+  grid.querySelectorAll(".reveal").forEach(observeReveal);
+}
+
+async function loadJson(url) {
+  try {
+    const res = await fetch(url, { cache: "no-cache" });
+    if (!res.ok) throw new Error(res.status);
+    return await res.json();
+  } catch (e) {
+    console.warn("読み込みに失敗しました:", url, e);
+    return null;
+  }
+}
+
+(async function initDynamicContent() {
+  const [news, docs, products] = await Promise.all([
+    loadJson("data/news.json"),
+    loadJson("data/documents.json"),
+    loadJson("data/products.json"),
+  ]);
+  if (Array.isArray(news)) newsData = news;
+  if (Array.isArray(docs)) docsData = docs;
+  if (products && Array.isArray(products.items)) productData = products;
+  renderNews();
+  renderDocs();
+  renderProductTabs();
+  renderProducts();
+})();
+
+/* =========================================================
+   志摩半島マップ（Leaflet）
+   ---------------------------------------------------------
+   拠点を追加・修正するときは AREA_SPOTS を編集するだけです。
+   ========================================================= */
+const AREA_SPOTS = [
+  {
+    lat: 34.36354, lng: 136.89618,
+    name_ja: "安乗漁港", name_en: "Anori Port",
+    desc_ja: "的矢湾の入口、安乗埼灯台のふもとに開けた港。ブランドとらふぐ「あのりふぐ」で知られ、外海の速い潮が身の締まった魚を育てます。心勢水産（仲買）と伊勢志摩冷凍（HACCP／SQF認証工場）が同じ敷地にあり、水揚げから凍結までを一か所で完結できる本会の中核拠点です。",
+    desc_en: "At the mouth of Matoya Bay, beneath the Anori Lighthouse. Famed for Anori fugu, a branded tiger pufferfish raised firm by fast open-sea currents. Home to Shinsei Suisan (wholesale) and Iseshima Reito (HACCP/SQF-certified plant) on one site — our core base, from landing to freezing.",
+  },
+  {
+    lat: 34.27788, lng: 136.89814,
+    name_ja: "波切漁港", name_en: "Nakiri Port",
+    desc_ja: "熊野灘と遠州灘がぶつかる海の難所・大王崎に抱かれた港町。古くから鰹漁とかつお節づくり（波切節）で栄え、石畳の坂道と大王埼灯台の風景は「絵かきの町」として画家たちに愛されてきました。荒々しい外洋が、伊勢えびをはじめ力強い魚を届けてくれます。",
+    desc_en: "A port town sheltered by Cape Daio, where the Kumano and Enshu seas collide. Nakiri has long lived with bonito fishing and katsuobushi making, and its stone lanes beneath the Daio Lighthouse have drawn painters for generations. Its rough open waters yield Ise-ebi lobster and powerfully flavored fish.",
+  },
+  {
+    lat: 34.25444, lng: 136.80391,
+    name_ja: "和具漁港", name_en: "Wagu Port",
+    desc_ja: "先志摩半島の中心に位置する、志摩でも指折りの漁師町。素潜りであわび・さざえを獲る海女漁の伝統が今も息づき、伊勢えびの刺網漁や沿岸漁業が盛んです。人の手と目で一つずつ獲る漁が、この海の資源を守り続けてきました。",
+    desc_en: "The heart of the Sakishima Peninsula and one of Shima's great fishing towns. The ama free-diving tradition — harvesting abalone and turban shells by breath alone — lives on here, alongside gill-net fishing for Ise-ebi lobster. Catching one by one, by hand and eye, is how this sea has been kept abundant.",
+  },
+  {
+    lat: 34.37239, lng: 136.88667,
+    name_ja: "的矢湾", name_en: "Matoya Bay",
+    desc_ja: "リアス海岸の静かな内湾。牡蠣養殖の産地として知られ、志摩の牡蠣漁業者との連携を広げています。",
+    desc_en: "A calm ria-coast inlet renowned for oyster farming — where we are expanding partnerships with Shima's oyster growers.",
+  },
+];
+
+function areaPopupHtml(s) {
+  const name = currentLang === "en" ? s.name_en : s.name_ja;
+  const desc = currentLang === "en" ? s.desc_en : s.desc_ja;
+  return '<p class="area-pop-name">' + name + '</p><p class="area-pop-desc">' + desc + "</p>";
+}
+
+function refreshAreaMarkers() {
+  areaMarkers.forEach((m) => {
+    m.setPopupContent(areaPopupHtml(m._spot));
+    const el = m.getElement();
+    if (el) {
+      const lbl = el.querySelector(".area-label");
+      if (lbl) lbl.textContent = currentLang === "en" ? m._spot.name_en : m._spot.name_ja;
+    }
+  });
+}
+
+(function initAreaMap() {
+  const el = document.getElementById("areaMap");
+  if (!el || typeof L === "undefined") return;
+  const map = L.map(el, { scrollWheelZoom: false, zoomControl: true });
+  map.setView([34.32, 136.86], 11);
+  // ベース地図：国土地理院 淡色地図（読み込み失敗時はOpenStreetMapへ自動切替）
+  const gsiLayer = L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", {
+    attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>',
+    maxZoom: 18,
+  });
+  let tileFails = 0;
+  gsiLayer.on("tileerror", () => {
+    tileFails++;
+    if (tileFails >= 3 && !map._fallbackApplied) {
+      map._fallbackApplied = true;
+      map.removeLayer(gsiLayer);
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 18,
+      }).addTo(map);
+    }
+  });
+  gsiLayer.addTo(map);
+  AREA_SPOTS.forEach((s) => {
+    const icon = L.divIcon({
+      className: "area-marker",
+      html: '<span class="area-dot"></span><span class="area-label">' + s.name_ja + "</span>",
+      iconSize: [14, 14],
+      iconAnchor: [7, 7],
+    });
+    const m = L.marker([s.lat, s.lng], { icon }).addTo(map).bindPopup(areaPopupHtml(s));
+    m._spot = s;
+    areaMarkers.push(m);
+  });
+  // 全ピンが収まるように表示範囲を自動調整
+  map.fitBounds(L.latLngBounds(AREA_SPOTS.map((s) => [s.lat, s.lng])), { padding: [46, 46], maxZoom: 12 });
+  refreshAreaMarkers();
+})();
+
+
+/* YouTube埋め込みの描画 */
+(function initRouteVideo() {
+  const box = document.getElementById("routeVideo");
+  if (!box || !Array.isArray(YOUTUBE_VIDEO_IDS) || YOUTUBE_VIDEO_IDS.length === 0) return;
+  box.hidden = false;
+  box.classList.toggle("multi", YOUTUBE_VIDEO_IDS.length > 1);
+  box.innerHTML = YOUTUBE_VIDEO_IDS.map((id) =>
+    '<div class="video-frame"><iframe src="https://www.youtube-nocookie.com/embed/' + id +
+    '?rel=0" title="協議会の動画" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>'
+  ).join("");
+})();
+
+
+/* メンバーカードのリンク描画 */
+(function initMemberLinks() {
+  document.querySelectorAll(".member-links[data-links]").forEach((box) => {
+    const items = (typeof MEMBER_LINKS === "object" && MEMBER_LINKS[box.dataset.links]) || [];
+    box.innerHTML = items.map((l) =>
+      '<a href="' + l.url + '" target="_blank" rel="noopener noreferrer">' + l.label + "</a>"
+    ).join("");
+  });
+})();

@@ -1,188 +1,397 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SAKANAYA JAPON - PRODUCT LIST</title>
-    <link rel="stylesheet" href="style.css?v=20260922">
-    <link rel="icon" href="images/logo.jpg">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title data-i18n="meta.title">伊勢志摩水産物輸出促進協議会｜御食国の食材を、世界へ</title>
+<meta name="description" data-i18n-content="meta.desc" content="伊勢志摩の漁師・仲買・冷凍加工・海藻・輸出商流の5者が連携し、志摩の水産物をベトナム・ハノイへ届ける輸出促進協議会の公式サイトです。">
+
+<!-- フォント：JA見出し=しっぽり明朝B1／EN見出し=Cormorant Garamond／本文=Zen角ゴシックNew -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@500;600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <header>
-        <div class="header-container header-flex-row">
-            <img src="images/logo.jpg" alt="SAKANAYA JAPON" class="logo-mini">
-            <div class="title-section">
-                <div class="title-with-footer">
-                    <h2 class="title-main-inline">PRODUCT LIST</h2>
-                    <span class="mini-footer">© 2026 SAKANAYA JAPON</span>
-                </div>
-                <p class="update-date-inline" id="update-date">UPDATE: —</p>
-            </div>
-            <div class="contact-section-inline">
-                <a href="tel:016881370" class="tel-inline-text">📞 016-881-370</a>
-                <!-- 取引先ログイン。未認証は「🔓 取引先ログイン」、認証済みは店名を表示しログアウトになる -->
-                <button id="access-btn" class="access-btn" onclick="onAccessBtnClick()">🔓 Partner login</button>
-            </div>
-        </div>
-    </header>
 
-    <div class="lang-bar">
-        <button id="lang-jp" class="lang-btn" onclick="setLang('jp')">🇯🇵 日本語</button>
-        <button id="lang-en" class="lang-btn" onclick="setLang('en')">🇬🇧 English</button>
-    </div>
+<!-- ================= ヘッダー ================= -->
+<header class="site-header" id="siteHeader">
+  <div class="header-inner">
+    <a href="#top" class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 40 40" width="34" height="34" role="img" aria-label="ロゴ">
+          <circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <path d="M6 24c4-4 8 4 12 0s8 4 12 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M9 17c3.5-3.5 7 3.5 10.5 0S26.5 20.5 30 17" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity=".65"/>
+        </svg>
+      </span>
+      <span class="brand-text">
+        <span class="brand-name" data-i18n="brand.name">伊勢志摩水産物輸出促進協議会</span>
+        <span class="brand-en" data-i18n="brand.sub">ISESHIMA SEAFOOD EXPORT COUNCIL</span>
+      </span>
+    </a>
 
-    <nav class="category-nav">
-        <button id="cat-all" class="nav-btn active" onclick="filterCategory('ALL', this)">ALL of Stock</button>
-        <button id="cat-kh" class="nav-btn" onclick="filterCategory('COUNTRY_KH', this)">🇰🇭 CAMBODIA</button>
-        <button id="cat-jp" class="nav-btn" onclick="filterCategory('COUNTRY_JP', this)">🇯🇵 JAPAN</button>
-        <button id="cat-frozen" class="nav-btn" onclick="filterCategory('FROZEN', this)">FROZEN</button>
-        <button id="cat-fillet" class="nav-btn" onclick="filterCategory('FRESH-FILLET/DR/SD', this)">FRESH FILLET/DR/SD/WHOLE</button>
-        <button class="nav-btn" id="cat-vege" onclick="filterCategory('VEGE', this)">VEGETABLE</button>    
-        <button id="cat-oil" class="nav-btn" onclick="filterCategory('OIL&SEASONING', this)">OIL & SEASONING</button>
-        <button class="nav-btn" id="cat-kitchen" onclick="filterCategory('KITCHEN', this)">KITCHEN SUPPLIES</button>
-        <button id="cat-waiting" class="nav-btn nav-btn-waiting" onclick="filterCategory('OUT_OF_STOCK', this)">OUT OF STOCK</button>
-        <a href="https://t.me/SAKANAYAJAPON" target="_blank" class="header-inquiry-btn" id="inquiry-btn">
-        💬 <span id="inquiry-text">INQUIRY</span>　
-        </a>
-        <div class="cart-wrapper">
-            <button id="cart-toggle-btn" class="cart-toggle-btn" onclick="toggleCartPanel()">
-                🛒 <span id="cart-count-badge" class="cart-count-badge">0</span>
-            </button>
-
-            <div id="cart-panel" class="cart-panel">
-                <div class="cart-panel-header">
-                    <span class="total-label" id="order-bar-label">📋 Your Order</span>
-                    <button class="cart-close-btn" onclick="closeCartPanel()">×</button>
-                </div>
-
-<div id="cart-items" class="cart-items">
-    <p class="cart-empty">No items selected.</p>
-</div>
-
-<div class="order-bar-actions" style="padding: 10px 15px; display: flex; flex-direction: column; gap: 10px;">
-    <button onclick="showOrderCheckModal()" class="order-send-btn" style="width: 100%; padding: 15px; background: #333; color: #fff; border: none; border-radius: 6px; font-weight: bold;">ご注文 / Order</button>
-    
-    <div style="display: flex; gap: 8px;">
-        <button onclick="document.getElementById('first-time-modal').style.display='flex'" class="order-send-btn" style="flex: 1; background: #666; font-size: 13px;">初めての方</button>
-        <button onclick="clearCart()" class="order-clear-btn" style="flex: 1; font-size: 13px;">クリア</button>
-    </div>
-</div>
-
-                <p class="total-note" id="order-bar-note"></p>
-                <a id="inquiry-floating-btn" class="inquiry-floating-btn" href="https://t.me/SAKANAYAJAPON" target="_blank"></a>
-            </div>
-        </div>
+    <nav class="global-nav" id="globalNav" aria-label="サイト内メニュー">
+      <ul>
+        <li><a href="#about" data-i18n="nav.about">協議会について</a></li>
+        <li><a href="#products" data-i18n="nav.products">取り扱い海産物</a></li>
+        <li><a href="#route" data-i18n="nav.route">志摩からハノイへ</a></li>
+        <li><a href="#members" data-i18n="nav.members">構成メンバー</a></li>
+        <li><a href="#news" data-i18n="nav.news">お知らせ</a></li>
+      </ul>
     </nav>
 
-    <div class="search-area">
-        <input type="text" id="search-input" placeholder="Search product name..." onkeyup="applyFilters()">
+    <!-- 言語切替 -->
+    <button class="lang-switch" id="langSwitch" type="button" aria-label="Switch language">
+      <span class="lang-opt" data-lang-opt="ja">日本語</span>
+      <span class="lang-sep">/</span>
+      <span class="lang-opt" data-lang-opt="en">EN</span>
+    </button>
+
+    <a href="#contact" class="header-cta" data-i18n="nav.contact">お問い合わせ</a>
+
+    <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="globalNav" aria-label="メニューを開く">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ================= ヒーロー ================= -->
+<section class="hero" aria-label="メインビジュアル">
+  <!-- 実写真差し替え：style.css の .hero 内コメント参照 -->
+  <div class="hero-sea" aria-hidden="true">
+    <span class="light light-1"></span>
+    <span class="light light-2"></span>
+    <span class="light light-3"></span>
+  </div>
+
+  <div class="hero-inner">
+    <div class="hero-copy">
+      <p class="hero-eyebrow" data-i18n="hero.eyebrow">三重県志摩市｜安乗・波切・和具の海から</p>
+      <h1 class="hero-title" data-i18n-html="hero.title">伊勢志摩水産物<br>輸出促進協議会</h1>
+      <p class="hero-lead" data-i18n-html="hero.lead">
+        漁師、仲買、冷凍加工、海藻、輸出商流。<br>
+        伊勢志摩の海に生きる五者がひとつになり、<br>
+        獲れたその日の誇りを、海の向こうの食卓へ。
+      </p>
+      <div class="hero-actions">
+        <a href="#route" class="btn btn-primary" data-i18n="hero.cta1">志摩からハノイへの航路を見る</a>
+        <a href="#contact" class="btn btn-ghost" data-i18n="hero.cta2">取引のご相談</a>
+      </div>
+      <ul class="hero-certs" aria-label="保有認証">
+        <li>HACCP</li>
+        <li data-i18n="hero.cert.sqf">SQF（GFSI承認）</li>
+        <li>JFS-B</li>
+      </ul>
     </div>
 
-    <!-- 商品リストのExcel(CSV)ダウンロード。クライアント側のみで完結・表示中/全商品を切替。
-         2026-09-18: 価格表の一括持ち出しを防ぐため既定で非表示にした。取引先認証の導入後、
-         認証済みの利用者にだけ .is-visible を付けて再表示する（表示制御は style.css / script.js）。 -->
-    <div id="export-area" class="export-area">
-        <button id="export-current-btn" class="nav-btn" onclick="exportCatalog('current')">⬇ This view to Excel</button>
-        <button id="export-all-btn" class="nav-btn" onclick="exportCatalog('all')">⬇ All items to Excel</button>
+    <!-- シグネチャー：JA=縦書き／EN=横組み（CSSで自動切替） -->
+    <p class="hero-tategaki" aria-hidden="true" data-i18n-html="hero.tategaki">御食国の食材を、<br><span class="tategaki-shift">世界へ。</span></p>
+  </div>
+
+  <svg class="wave wave-hero" viewBox="0 0 1440 90" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M0,48 C240,88 480,8 720,40 C960,72 1200,24 1440,52 L1440,90 L0,90 Z"></path>
+  </svg>
+</section>
+
+<!-- ================= 三つの漁港 ================= -->
+<section class="ports" aria-label="拠点となる漁港">
+  <div class="container ports-row">
+    <p class="ports-caption" data-i18n="ports.caption">わたしたちの海</p>
+    <ul class="ports-list">
+      <li><span class="port-kanji" data-i18n="ports.p1">安乗</span><span class="port-note" data-i18n="ports.p1n">あのりふぐの港。仲買と加工が一つ屋根に</span></li>
+      <li><span class="port-kanji" data-i18n="ports.p2">波切</span><span class="port-note" data-i18n="ports.p2n">大王埼灯台の港。鰹とともに生きてきた町</span></li>
+      <li><span class="port-kanji" data-i18n="ports.p3">和具</span><span class="port-note" data-i18n="ports.p3n">海女とともにある港。伊勢えび・あわびの海</span></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= 志摩半島マップ ================= -->
+<section class="section area" id="area">
+  <div class="container">
+    <header class="section-head reveal">
+      <p class="section-eyebrow">The Peninsula</p>
+      <h2 class="section-title" data-i18n="area.title">志摩半島と、わたしたちの漁港</h2>
+      <p class="section-lead" data-i18n="area.lead">伊勢志摩国立公園に抱かれた志摩半島。リアス海岸の内湾と黒潮が出会うこの海の、外洋に開かれた安乗・波切・和具の3つの港と的矢湾から、私たちの水産物は生まれます。</p>
+    </header>
+    <div class="area-map-wrap reveal">
+      <div id="areaMap" aria-label="志摩半島の地図"></div>
     </div>
+    <p class="area-note" data-i18n="area.note">ピンを選ぶと、各拠点の説明が表示されます。</p>
+  </div>
+</section>
 
-    <div class="notice-area">
-        <details class="notice-box"open>
-            <summary id="notice-summary-text">【 NOTICE 】 Click to view details</summary>
-            <div class="notice-content">
-                <div id="notice-body-content"></div>
-            </div>
-        </details>
+<!-- ================= 協議会について ================= -->
+<section class="section about" id="about">
+  <div class="container">
+    <header class="section-head reveal">
+      <p class="section-eyebrow">About</p>
+      <h2 class="section-title" data-i18n-html="about.title">五つの技が、<br class="sp-only">ひとつの海で結ばれる。</h2>
+    </header>
+
+    <div class="about-grid">
+      <p class="about-lead reveal" data-i18n-html="about.lead">
+        伊勢志摩水産物輸出促進協議会は、志摩の<strong>漁師・仲買・冷凍加工・海藻・輸出商流</strong>の五者が設立した、地域に開かれた団体です。それぞれの海で磨いてきた技と誇りを持ち寄り、獲る・目利きする・加工する・届けるまでを一気通貫で担います。国際認証（HACCP・SQF・JFS-B）を持つ二つの工場と、東南アジアで実際に商う現地販路。伊勢志摩の海の恵みを、鮮度と信頼ごと輸出します。
+      </p>
+      <dl class="about-facts reveal">
+        <div><dt data-i18n="about.f1t">設立</dt><dd data-i18n="about.f1d">令和8年（2026年）7月24日</dd></div>
+        <div><dt data-i18n="about.f2t">所在地</dt><dd data-i18n="about.f2d">三重県志摩市阿児町安乗178番地3</dd></div>
+        <div><dt data-i18n="about.f3t">構成</dt><dd data-i18n="about.f3d">法人4社＋漁師（志摩市・大阪市）</dd></div>
+        <div><dt data-i18n="about.f4t">第一目標市場</dt><dd data-i18n="about.f4d">ベトナム・ハノイ</dd></div>
+      </dl>
     </div>
+  </div>
+</section>
 
-    <section id="recommend-section" class="recommend-section hidden">
-        <div class="section-header"><h3 id="recommend-title">🔥 Today's Recommendation</h3></div>
-        <div id="recommend-container" class="container recommend-container"></div>
-    </section>
+<!-- ================= 取り扱い海産物 ================= -->
+<section class="section products" id="products">
+  <div class="container">
+    <header class="section-head reveal">
+      <p class="section-eyebrow">Our Seafood</p>
+      <h2 class="section-title" data-i18n="products.title">獲る、目利きする、仕立てる。</h2>
+      <p class="section-lead" data-i18n="products.lead">生鮮から一次・二次・三次加工、養殖まで。五者それぞれの持ち場が連なり、レストランの一皿に合わせた形でお届けします。</p>
+    </header>
 
-    <section class="product-section">
-        <div id="product-container" class="container"></div>
-    </section>
+    <!-- カテゴリ切替（data/products.json から自動生成） -->
+    <div class="product-tabs reveal" id="productTabs"></div>
 
-    <!-- 写真ポップアップ：flex-direction:column で写真の下に商品説明（#modal-caption）を表示 -->
-    <div id="image-modal" class="modal" onclick="closeModal()" style="flex-direction:column;">
-        <span class="close-btn">×</span>
-        <img class="modal-content" id="modal-img" alt="Product Image">
-        <p id="modal-caption" onclick="event.stopPropagation()" style="display:none; background:#fff; color:#333; max-width:90%; max-height:30vh; overflow-y:auto; margin:10px auto 0; padding:10px 14px; border-radius:6px; font-size:0.9rem; line-height:1.6; text-align:left; box-sizing:border-box; white-space:pre-line;"></p>
+    <!-- 商品カード（data/products.json から自動生成。このHTMLは編集不要） -->
+    <div class="product-grid" id="productGrid">
+      <p class="news-empty" data-i18n="products.loading">読み込み中…</p>
     </div>
+  </div>
+</section>
 
-    <script src="script.js?v=20260918"></script>
+<!-- ================= 航路 ================= -->
+<section class="section route" id="route">
+  <div class="container">
+    <header class="section-head reveal">
+      <p class="section-eyebrow">The Route</p>
+      <h2 class="section-title" data-i18n="route.title">朝、志摩の港。翌々日、ハノイの食卓。</h2>
+      <p class="section-lead" data-i18n="route.lead">集荷から加工・冷凍までが一つの敷地で完結し、羽田空港至近の拠点から直行便約6時間。鮮度のリレーが、この航路の設計図です。</p>
+    </header>
 
-    <div id="first-time-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:10000; justify-content:center; align-items:center;">
-    <div style="background:#fff; width:90%; max-width:400px; padding:25px; border-radius:12px; box-shadow:0 10px 25px rgba(0,0,0,0.3); position:relative;">
-        
-        <h3 id="modal-title" style="margin-top:0; border-bottom:2px solid #333; padding-bottom:10px;">新規登録</h3>
-        
-        <div style="margin-top:15px;">
-            <label id="label-shop" style="display:block; font-size:0.8rem; font-weight:bold;">店名</label>
-            <input type="text" id="reg-shop-name" style="width:100%; padding:10px; margin-bottom:15px; border:1px solid #ccc; border-radius:4px;">
-            
-            <label id="label-staff" style="display:block; font-size:0.8rem; font-weight:bold;">担当者名</label>
-            <input type="text" id="reg-staff-name" style="width:100%; padding:10px; margin-bottom:15px; border:1px solid #ccc; border-radius:4px;">
-            
-            <label id="label-phone" style="display:block; font-size:0.8rem; font-weight:bold;">電話番号</label>
-            <input type="tel" id="reg-phone" placeholder="0123456789" style="width:100%; padding:10px; margin-bottom:20px; border:1px solid #ccc; border-radius:4px;">
-        </div>
+    <ol class="route-line" id="routeLine">
+      <li class="route-step reveal">
+        <span class="route-no">1</span>
+        <h3 data-i18n="route.s1t">水揚げ</h3>
+        <p data-i18n="route.s1d">安乗・波切・和具の漁港から、その日の魚を。</p>
+      </li>
+      <li class="route-step reveal">
+        <span class="route-no">2</span>
+        <h3 data-i18n="route.s2t">加工・冷凍</h3>
+        <p data-i18n="route.s2d">港の目の前、HACCP・SQF認証工場で即日処理。</p>
+      </li>
+      <li class="route-step reveal">
+        <span class="route-no">3</span>
+        <h3 data-i18n="route.s3t">羽田から空輸</h3>
+        <p data-i18n="route.s3d">空港至近の輸出拠点から、直行便で約6時間。</p>
+      </li>
+      <li class="route-step reveal">
+        <span class="route-no">4</span>
+        <h3 data-i18n="route.s4t">ハノイの食卓へ</h3>
+        <p data-i18n="route.s4d">現地で商う自前の販路が、最後の一皿まで届けます。</p>
+      </li>
+    </ol>
+    <!-- YouTube動画（script.js の YOUTUBE_VIDEO_ID を設定すると表示されます） -->
+    <div class="route-video reveal" id="routeVideo" hidden></div>
+  </div>
+</section>
 
-        <!-- H-5: 登録の成否をインライン表示する状態行（processFirstTimeRegistration が更新） -->
-        <p id="reg-status-msg" style="min-height:1.2em; font-size:0.85rem; margin:0 0 10px; white-space:pre-line;"></p>
+<!-- ================= 強み ================= -->
+<section class="section strengths">
+  <div class="container">
+    <header class="section-head reveal">
+      <p class="section-eyebrow">Why Us</p>
+      <h2 class="section-title" data-i18n="why.title">信頼は、書類と現場の両方でつくる。</h2>
+    </header>
+    <div class="strength-grid">
+      <div class="strength reveal">
+        <h3 data-i18n="why.s1t">国際認証の工場が二つ</h3>
+        <p data-i18n="why.s1d">HACCP・SQF（GFSI承認）・JFS-B。輸出先の基準に、施設ごと応えます。</p>
+      </div>
+      <div class="strength reveal">
+        <h3 data-i18n="why.s2t">敷地内一体のサプライチェーン</h3>
+        <p data-i18n="why.s2d">仲買の本社敷地内に加工場。集荷から冷凍保管まで、移動ゼロで鮮度を守ります。</p>
+      </div>
+      <div class="strength reveal">
+        <h3 data-i18n="why.s3t">東南アジアの現地販路</h3>
+        <p data-i18n="why.s3d">ベトナム・カンボジアへの輸出実績と現地小売。市場の声が直接届く距離で商います。</p>
+      </div>
+      <div class="strength reveal">
+        <h3 data-i18n="why.s4t">小ロット・多品種</h3>
+        <p data-i18n="why.s4d">フィレも調理加工も。レストランの献立に合わせた柔軟な供給が可能です。</p>
+      </div>
+    </div>
+  </div>
+</section>
 
-        <div style="display:flex; gap:10px;">
-            <button id="btn-cancel" onclick="closeFirstTimeModal()" style="flex:1; padding:12px; background:#eee; border:none; border-radius:6px; cursor:pointer;">キャンセル</button>
-            <button id="btn-submit" onclick="processFirstTimeRegistration()" style="flex:2; padding:12px; background:#333; color:#fff; border:none; border-radius:6px; font-weight:bold; cursor:pointer;">登録</button>
-        </div>
+<!-- ================= 構成メンバー ================= -->
+<section class="section members" id="members">
+  <div class="container">
+    <header class="section-head reveal">
+      <p class="section-eyebrow">Members</p>
+      <h2 class="section-title" data-i18n="members.title">五者の顔ぶれ</h2>
+    </header>
+    <ul class="member-grid">
+      <li class="member-card reveal">
+        <span class="member-role" data-i18n="members.m1r">会長／仲買</span>
+        <h3 class="member-person" data-i18n="members.m1p">片山 勝仁</h3>
+        <p class="member-org" data-i18n="members.m1n">心勢水産有限会社</p>
+        <p class="member-note" data-i18n="members.m1d">伊勢志摩の目利きと商流（志摩市安乗）</p>
+        <div class="member-links" data-links="katayama"></div>
+      </li>
+      <li class="member-card reveal">
+        <span class="member-role" data-i18n="members.m3r">副会長／漁師</span>
+        <h3 class="member-person" data-i18n="members.m3p">井上 和</h3>
+        <p class="member-org" data-i18n="members.m3n">漁船「第1和丸」船長</p>
+        <p class="member-note" data-i18n="members.m3d">志島の海と漁師ネットワーク</p>
+        <div class="member-links" data-links="inoue"></div>
+      </li>
+      <li class="member-card reveal">
+        <span class="member-role" data-i18n="members.m2r">理事／冷凍・加工</span>
+        <h3 class="member-person" data-i18n="members.m2p">石川 隆将</h3>
+        <p class="member-org" data-i18n="members.m2n">有限会社伊勢志摩冷凍</p>
+        <p class="member-note" data-i18n="members.m2d">HACCP・SQF認証工場、香港・タイ・シンガポール輸出実績</p>
+        <div class="member-links" data-links="ishikawa"></div>
+      </li>
+      <li class="member-card reveal">
+        <span class="member-role" data-i18n="members.m4r">理事／海藻</span>
+        <h3 class="member-person" data-i18n="members.m4p">廣岡 辰一</h3>
+        <p class="member-org" data-i18n="members.m4n">カネウフーズ株式会社</p>
+        <p class="member-note" data-i18n="members.m4d">創業150年、JFS-B認証工場（志島・鵜方）</p>
+        <div class="member-links" data-links="hirooka"></div>
+      </li>
+      <li class="member-card reveal">
+        <span class="member-role" data-i18n="members.m5r">事務局／輸出</span>
+        <h3 class="member-person" data-i18n="members.m5p">光信 嘉久</h3>
+        <p class="member-org" data-i18n="members.m5n">株式会社METIS</p>
+        <p class="member-note" data-i18n="members.m5d">ベトナム・カンボジア輸出、羽田至近の輸出拠点</p>
+        <div class="member-links" data-links="metis"></div>
+      </li>
+      <li class="member-card member-card-advisor reveal">
+        <span class="member-role" data-i18n="members.m6r">顧問</span>
+        <h3 class="member-person" data-i18n="members.m6p">片野 歩</h3>
+        <p class="member-org" data-i18n="members.m6n">FISK JAPAN</p>
+        <p class="member-note" data-i18n="members.m6d">水産物輸出・国際水産事情の専門家として指導・助言</p>
+        <div class="member-links" data-links="katano"></div>
+      </li>
+      <li class="member-card member-card-advisor reveal">
+        <span class="member-role" data-i18n="members.m7r">監事</span>
+        <h3 class="member-person" data-i18n="members.m7p">向井 新悟</h3>
+        <p class="member-org" data-i18n="members.m7n">南部急送有限会社</p>
+        <p class="member-note" data-i18n="members.m7d">物流の専門家として、構成員から独立した中立の立場で監査</p>
+        <div class="member-links" data-links="mukai"></div>
+      </li>
+    </ul>
+    <p class="member-adviser reveal" data-i18n="members.support">三重県・志摩市・JETRO三重と連携して活動しています。</p>
+  </div>
+</section>
+
+<!-- ================= お知らせ ================= -->
+<section class="section news" id="news">
+  <div class="container">
+    <header class="section-head reveal">
+      <p class="section-eyebrow">News</p>
+      <h2 class="section-title" data-i18n="news.title">お知らせ</h2>
+    </header>
+    <ul class="news-list" id="newsList">
+      <!-- お知らせは data/news.json から自動生成されます（このHTMLは編集不要） -->
+      <li class="news-empty" data-i18n="news.loading">読み込み中…</li>
+    </ul>
+    <!-- 過去のお知らせ開閉ボタン（6件目以降がある場合に自動表示） -->
+    <div class="news-more" id="newsMore"></div>
+  </div>
+</section>
+
+<!-- ================= 規程・公開資料 ================= -->
+<section class="section docs" id="docs">
+  <div class="container">
+    <header class="section-head reveal">
+      <p class="section-eyebrow">Documents</p>
+      <h2 class="section-title" data-i18n="docs.title">規程・公開資料</h2>
+      <p class="section-lead" data-i18n="docs.lead">協議会の定款・諸規程、および事業計画・事業報告をPDFでご覧いただけます。</p>
+    </header>
+
+    <!-- 規程（基本文書） -->
+    <h3 class="docs-group-title reveal" data-i18n="docs.g1">規程</h3>
+    <ul class="docs-list">
+      <li class="reveal"><a href="docs/01_teikan.pdf" target="_blank" rel="noopener"><span class="docs-num">別添1</span><span data-i18n="docs.d1">定款</span><span class="docs-type">PDF</span></a></li>
+      <li class="reveal"><a href="docs/02_soshiki_kitei.pdf" target="_blank" rel="noopener"><span class="docs-num">別添2</span><span data-i18n="docs.d2">組織規程</span><span class="docs-type">PDF</span></a></li>
+      <li class="reveal"><a href="docs/03_keiri_kitei.pdf" target="_blank" rel="noopener"><span class="docs-num">別添3</span><span data-i18n="docs.d3">経理規程</span><span class="docs-type">PDF</span></a></li>
+    </ul>
+
+    <!-- 事業計画・事業報告（data/documents.json から自動生成） -->
+    <h3 class="docs-group-title reveal" data-i18n="docs.g2">事業計画・事業報告</h3>
+    <ul class="docs-list" id="plansList">
+      <li class="news-empty" data-i18n="docs.loading">読み込み中…</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= お問い合わせ ================= -->
+<section class="section contact" id="contact">
+  <svg class="wave wave-contact" viewBox="0 0 1440 90" preserveAspectRatio="none" aria-hidden="true">
+    <path d="M0,42 C240,82 480,2 720,34 C960,66 1200,18 1440,46 L1440,0 L0,0 Z"></path>
+  </svg>
+  <div class="container contact-inner">
+    <header class="section-head section-head-invert reveal">
+      <p class="section-eyebrow">Contact</p>
+      <h2 class="section-title" data-i18n="contact.title">取引・視察・取材のご相談</h2>
+      <p class="section-lead" data-i18n="contact.lead">海外バイヤーの方、飲食店・小売の方、報道・行政の方。まずはお気軽にご連絡ください。</p>
+    </header>
+
+    <!-- mailto方式。CONTACT_EMAIL は script.js 先頭で設定 -->
+    <form class="contact-form reveal" id="contactForm" novalidate>
+      <div class="form-row">
+        <label for="cfName"><span data-i18n="form.name">お名前</span><span class="req" data-i18n="form.req">必須</span></label>
+        <input type="text" id="cfName" name="name" autocomplete="name" required placeholder="例）山田 太郎" data-i18n-ph="form.name.ph">
+      </div>
+      <div class="form-row">
+        <label for="cfOrg"><span data-i18n="form.org">会社名・団体名</span></label>
+        <input type="text" id="cfOrg" name="org" autocomplete="organization" placeholder="例）Hanoi Fine Foods Co., Ltd." data-i18n-ph="form.org.ph">
+      </div>
+      <div class="form-row">
+        <label for="cfMail"><span data-i18n="form.mail">ご連絡先メール</span><span class="req" data-i18n="form.req2">必須</span></label>
+        <input type="email" id="cfMail" name="email" autocomplete="email" required placeholder="例）you@example.com" data-i18n-ph="form.mail.ph">
+      </div>
+      <div class="form-row">
+        <label for="cfBody"><span data-i18n="form.body">ご相談内容</span><span class="req" data-i18n="form.req3">必須</span></label>
+        <textarea id="cfBody" name="body" rows="5" required placeholder="例）ハノイの日本食レストラン向けに、鮮魚と冷凍フィレの仕入れを検討しています。" data-i18n-ph="form.body.ph"></textarea>
+      </div>
+      <p class="form-note" id="formNote" data-i18n="form.note">送信ボタンを押すと、メール作成画面が開きます（内容は自動で入力されます）。</p>
+      <button type="submit" class="btn btn-primary btn-wide" data-i18n="form.submit">メールで相談する</button>
+      <p class="form-alt"><span data-i18n="form.alt">メールが開かない場合はこちらへ直接ご連絡ください：</span> <a href="#" id="mailFallback">…</a></p>
+    </form>
+  </div>
+</section>
+
+</main>
+
+<!-- ================= フッター ================= -->
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <div class="footer-brand">
+      <p class="footer-name" data-i18n="footer.name">伊勢志摩水産物輸出促進協議会</p>
+      <p class="footer-en" data-i18n="footer.sub">ISESHIMA SEAFOOD EXPORT COUNCIL</p>
+      <p class="footer-addr" data-i18n="footer.addr">三重県志摩市阿児町安乗178番地3（心勢水産有限会社内）</p>
     </div>
-</div>
-    <!-- 取引先ログイン：コードを GAS へ送り、通ればトークンを受け取って価格を表示する -->
-    <div id="unlock-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:10003; justify-content:center; align-items:center;">
-        <div style="background:#fff; width:90%; max-width:400px; padding:25px; border-radius:12px; box-shadow:0 10px 25px rgba(0,0,0,0.3);">
-            <h3 id="unlock-title" style="margin-top:0; border-bottom:2px solid #333; padding-bottom:10px;">取引先ログイン</h3>
-            <p id="unlock-lead" style="font-size:0.85rem; color:#555; margin:12px 0;"></p>
-            <input type="text" id="unlock-code" autocomplete="off" autocapitalize="characters" spellcheck="false"
-                   onkeydown="if(event.key==='Enter'){event.preventDefault();submitAccessCode();}"
-                   style="width:100%; padding:10px; margin-bottom:10px; border:1px solid #ccc; border-radius:4px; letter-spacing:0.08em;">
-            <p id="unlock-status-msg" style="min-height:1.2em; font-size:0.85rem; margin:0 0 10px; white-space:pre-line;"></p>
-            <div style="display:flex; gap:10px;">
-                <button id="unlock-btn-cancel" onclick="closeUnlockModal()" style="flex:1; padding:12px; background:#eee; border:none; border-radius:6px; cursor:pointer;">キャンセル</button>
-                <button id="unlock-btn-submit" onclick="submitAccessCode()" style="flex:2; padding:12px; background:#333; color:#fff; border:none; border-radius:6px; font-weight:bold; cursor:pointer;">ログイン</button>
-            </div>
-            <p id="unlock-help" style="font-size:0.75rem; color:#666; margin:14px 0 0;"></p>
-        </div>
-    </div>
-    <div id="order-check-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:10001; justify-content:center; align-items:center;">
-    <div style="background:#fff; width:85%; max-width:350px; padding:20px; border-radius:12px; text-align:center;">
-        <h3 id="check-title" style="margin-bottom:15px;"></h3>
-        <p id="check-lead" style="font-size:0.85rem; color:#555;"></p>
-        <div style="text-align:left; font-weight:bold; font-size:0.85rem; margin:8px 0 4px;">
-            <span id="check-items-label"></span>
-        </div>
-        <div id="check-order-summary" style="text-align:left; max-height:34vh; overflow-y:auto; background:#f9f9f9; border:1px solid #eee; border-radius:6px; padding:10px; font-size:0.85rem;"></div>
-        <label id="check-phone-label" style="display:block; text-align:left; font-weight:bold; font-size:0.85rem; margin-top:12px;"></label>
-        <input type="tel" id="check-phone" placeholder="0123456789" style="width:100%; padding:10px; margin:15px 0; border:1px solid #ccc; border-radius:4px;">
-        <p id="check-phone-note" style="text-align:left; font-size:0.75rem; color:#666; margin:4px 0 0;"></p>
-        <div style="display:flex; gap:10px; margin-top:15px;">
-            <button id="check-btn-back" onclick="document.getElementById('order-check-modal').style.display='none'" style="flex:1; padding:10px; background:#eee; border:none; border-radius:6px;"></button>
-            <button id="check-btn-confirm" onclick="finalizeOrderProcess()" style="flex:1; padding:10px; background:#333; color:#fff; border:none; border-radius:6px;"></button>
-        </div>
-    </div>
-</div>
-    <!-- 注文結果モーダル（成功/未登録/失敗を1枚で切替・showOrderResult が制御） -->
-    <div id="order-result-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:10002; justify-content:center; align-items:center;">
-        <div style="background:#fff; width:85%; max-width:360px; padding:24px; border-radius:12px; text-align:center;">
-            <div id="result-icon" style="font-size:2.4rem; margin-bottom:6px;">✅</div>
-            <h3 id="result-title" style="margin:0 0 6px;"></h3>
-            <p id="result-orderno" style="font-size:1.1rem; font-weight:bold; letter-spacing:.03em; margin:6px 0;"></p>
-            <p id="result-body" style="font-size:0.9rem; color:#555; white-space:pre-line; line-height:1.6; margin:6px 0 0;"></p>
-            <div style="display:flex; gap:10px; margin-top:18px;">
-                <button id="result-btn-secondary" style="flex:1; padding:11px; background:#eee; border:none; border-radius:6px;"></button>
-                <button id="result-btn-primary"   style="flex:1; padding:11px; background:#333; color:#fff; border:none; border-radius:6px; font-weight:bold;"></button>
-            </div>
-        </div>
-    </div>
+    <nav class="footer-nav" aria-label="フッターメニュー">
+      <a href="#about" data-i18n="nav.about">協議会について</a>
+      <a href="#products" data-i18n="nav.products">取り扱い海産物</a>
+      <a href="#route" data-i18n="nav.route">志摩からハノイへ</a>
+      <a href="#members" data-i18n="nav.members">構成メンバー</a>
+      <a href="#contact" data-i18n="nav.contact">お問い合わせ</a>
+    </nav>
+  </div>
+  <p class="footer-copy">© <span id="year"></span> Iseshima Seafood Export Council</p>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="script.js"></script>
 </body>
 </html>
