@@ -21,6 +21,8 @@ let currentCategory = 'ALL';
 let allProducts = [];
 let cart = {};
 let currentClientOrderId = ''; // send_order の冪等キー（確認モーダルで採番→成功で破棄・設計§5-1）
+let orderSending = false; // 注文送信中フラグ（確定ボタンの連打・送信中の再表示を防ぐ・2026-11-03）
+const ORDER_TIMEOUT_MS = 45000; // 送信のタイムアウト（GAS の処理待ちを考慮）
 let lastFiltered = []; // 直近の絞り込み結果（Excelダウンロード「表示中」用）
 let catalogUpdateDate = ''; // カタログの更新日（ダウンロードファイル名用）
 let pricesVisible = false; // 直近の応答に価格が含まれていたか（＝価格を表示してよいか）
@@ -540,6 +542,7 @@ function genClientOrderId() {
 }
 
 function showOrderCheckModal() {
+    if (orderSending) return; // 送信中は開き直さない（二重注文防止）
     const items = Object.values(cart);
     if (items.length === 0) { alert(currentLang === 'jp' ? "カートが空です" : "Cart is empty"); return; }
     const jp = currentLang === 'jp';
@@ -586,8 +589,8 @@ function showOrderResult(kind, orderNo) {
         title.textContent = jp ? '送信できませんでした' : "Couldn't Send";
         noEl.textContent = ''; noEl.style.display = 'none';
         body.textContent = jp
-            ? '通信環境をご確認のうえ、もう一度お試しください。\nご注文内容（カート）はそのまま残っています🛒'
-            : 'Please check your connection and try again.\nYour cart has been kept 🛒';
+            ? '通信環境をご確認のうえ、もう一度お試しください。\nご注文内容（カート）はそのまま残っています🛒\n\n※Telegramに確認メッセージが届いている場合、ご注文は完了しています。もう一度送っても同じご注文が二重に登録されることはありません。'
+            : "Please check your connection and try again.\nYour cart has been kept 🛒\n\n*If you already received a confirmation on Telegram, your order is complete. Sending again will not create a duplicate order.";
         secondary.style.display = '';
         secondary.textContent = jp ? '閉じる' : 'Close';
         secondary.onclick = closeOrderResult; // 閉じるのみ（カート保持）
@@ -599,26 +602,26 @@ function showOrderResult(kind, orderNo) {
 
     // 受付完了（登録済み/未登録とも ✅・拒否面にしない・デザイン§3-2）
     icon.textContent = '✅';
-    title.textContent = jp ? 'ご注文を承りました' : 'Order Received';
+    title.textContent = jp ? 'ご注文ありがとうございました' : 'Thank You for Your Order';
     noEl.textContent = hasNo ? (jp ? `ご注文番号：${orderNo}` : `Order No.: ${orderNo}`) : '';
     noEl.style.display = hasNo ? '' : 'none';
 
     if (!hasNo) {
         // orderNo 欠落（万一 GAS 旧版）：W番号なしの汎用成功にフォールバック（設計§3-1）
-        body.textContent = jp ? 'ご注文を承りました。' : 'Your order has been received.';
+        body.textContent = jp ? 'ご注文を承りました。\n詳細はTelegramをご確認ください📩' : 'Your order has been received.\nPlease check Telegram for the details 📩';
         secondary.style.display = 'none';
         primary.textContent = jp ? '閉じる' : 'Close';
         primary.onclick = closeOrderResult; // カートは受付完了時に破棄済み（M-3）
     } else if (kind === 'registered') {
         body.textContent = jp
-            ? 'Telegramに確認メッセージをお送りしました📩\n担当者が内容を確認し、追ってご連絡いたします🐟'
-            : "We've sent a confirmation to your Telegram 📩\nOur staff will review it and get back to you 🐟";
+            ? 'ご注文ありがとうございました🐟\n詳細はTelegramをご確認ください📩'
+            : 'Thank you for your order 🐟\nPlease check Telegram for the details 📩';
         secondary.style.display = 'none';
         primary.textContent = jp ? '閉じる' : 'Close';
         primary.onclick = closeOrderResult; // カートは受付完了時に破棄済み（M-3）
     } else { // unregistered（拒否しない：受付完了＋Telegram連携はここから・導線A 2026-07-08）
         body.textContent = jp
-            ? 'ご注文はしっかりお受けしました✅\n\n📱 下のボタンからTelegramを開くと、ご注文の確認メッセージをTelegramで受け取れるようになります（今回のご注文はこのまま進みます）。'
+            ? 'ご注文はしっかりお受けしました✅\n\n📱 詳細はTelegramでお知らせします。下のボタンからTelegramを開いてください（今回のご注文はこのまま進みます）。'
             : 'Your order has been received ✅\n\n📱 Tap below to open Telegram and get your order confirmations there (this order is already being processed).';
         secondary.style.display = '';
         secondary.textContent = jp ? '閉じる' : 'Close';
@@ -634,29 +637,73 @@ function showOrderResult(kind, orderNo) {
 }
 function closeOrderResult() { document.getElementById('order-result-modal').style.display = 'none'; }
 
+// 確認モーダルの「送信中」表示の切替（ボタン無効化・文言変更。モーダルは閉じずに待たせる）
+function setOrderSendingUi(sending) {
+    const jp = currentLang === 'jp';
+    const confirmBtn = document.getElementById('check-btn-confirm');
+    const backBtn = document.getElementById('check-btn-back');
+    const phone = document.getElementById('check-phone');
+    const lead = document.getElementById('check-lead');
+    if (confirmBtn) {
+        confirmBtn.disabled = sending;
+        confirmBtn.style.opacity = sending ? '0.6' : '';
+        confirmBtn.textContent = sending ? (jp ? '送信中…' : 'Sending…') : (jp ? '確定する' : 'Confirm');
+    }
+    if (backBtn) { backBtn.disabled = sending; backBtn.style.opacity = sending ? '0.6' : ''; }
+    if (phone) phone.readOnly = sending;
+    if (lead) {
+        lead.textContent = sending
+            ? (jp ? '⏳ ご注文を送信しています。画面を閉じずに少々お待ちください…' : '⏳ Sending your order. Please wait and do not close this page…')
+            : (jp ? '以下の内容で承ります。よろしければ「確定する」を押してください🐟' : 'Please review your order below, then tap "Confirm" 🐟');
+    }
+}
+
 async function finalizeOrderProcess() {
+    if (orderSending) return; // 連打・二重送信の防止
     const p = document.getElementById('check-phone')?.value.trim(), n = document.getElementById('cart-notes')?.value.trim(), items = Object.values(cart);
+    if (items.length === 0) { document.getElementById('order-check-modal').style.display = 'none'; return; }
     if (!p) { alert(currentLang === 'jp' ? "電話番号を入力してください。" : "Please enter your phone number."); return; }
-    document.getElementById('order-check-modal').style.display = 'none';
+    orderSending = true;
+    setOrderSendingUi(true); // モーダルは開いたまま「送信中」に（何も表示されない待ち時間をなくす）
     localStorage.setItem('user_phone', p);
     // 冪等キー：確認モーダルで採番済みを使う（未採番なら生成）＝再送の二重起票防止（設計§5-1）
     if (!currentClientOrderId) currentClientOrderId = genClientOrderId();
     let orderData = '【New Order】\n';
     items.forEach(i => { orderData += `${i.code || '---'} ${currentLang === 'jp' ? i.product_name_jp : i.product_name_en} ${currentLang === 'jp' ? i.variant_name_jp : i.variant_name_en} x ${i.qty}点\n`; });
+    // タイムアウト（応答が返らないまま待たせ続けない）
+    const ctrl = (typeof AbortController === 'function') ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), ORDER_TIMEOUT_MS) : null;
+    let ok = false, registered = false, orderNo = '';
     try {
         // spreadsheetId/targetGroupId は送らない（0-5/0-6クローズ）。Content-Type 未指定で preflight 回避（設計§3-2）
-        const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'send_order', phone: p, orderData: orderData, notes: n, clientOrderId: currentClientOrderId })});
+        const res = await fetch(GAS_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: 'send_order', phone: p, orderData: orderData, notes: n, clientOrderId: currentClientOrderId }),
+            signal: ctrl ? ctrl.signal : undefined
+        });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const result = await res.json();
-        // status==="error" のみ失敗扱い。旧応答 status==="unregistered" は拒否せず受付完了へ倒す（拒否アラート廃止）
-        if (result && result.status === 'error') throw new Error(result.message || 'server error');
-        // 新応答 {status:"ok", orderNo, registered}。registered!==true は未登録として案内付き受付完了に
-        const registered = !!(result && result.registered === true);
-        showOrderResult(registered ? 'registered' : 'unregistered', result && result.orderNo);
-        // 受付完了した時点でカート・冪等キーを破棄＝登録有無に関わらず別W行の二重注文を防ぐ（M-3・clearCart が currentClientOrderId も空に）
-        clearCart();
+        // 成功は status==="ok"（旧応答 "unregistered" も受付完了として扱う）。それ以外・空応答は失敗＝偽の成功を出さない
+        if (!result || (result.status !== 'ok' && result.status !== 'unregistered')) {
+            throw new Error((result && result.message) || 'server error');
+        }
+        registered = result.registered === true;
+        orderNo = result.orderNo || '';
+        ok = true;
     } catch (e) {
-        // 通信失敗/サーバエラー：偽の成功を出さずカート保持で失敗モーダル（H-1・デザイン§3-3）
+        console.error('注文送信エラー:', e);
+    } finally {
+        if (timer) clearTimeout(timer);
+        orderSending = false;
+        setOrderSendingUi(false);
+    }
+    document.getElementById('order-check-modal').style.display = 'none';
+    if (ok) {
+        // 受付完了した時点でカート・冪等キーを破棄＝確認画面を再度開いても送れない（M-3・clearCart が currentClientOrderId も空に）
+        clearCart();
+        showOrderResult(registered ? 'registered' : 'unregistered', orderNo);
+    } else {
+        // 通信失敗/サーバエラー/タイムアウト：カートと冪等キーを保持（再送しても GAS 側で同一注文として扱われる）
         showOrderResult('failed', '');
     }
 }
