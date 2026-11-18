@@ -30,6 +30,30 @@ let catalogUpdateDate = ''; // カタログの更新日（ダウンロードフ�
 let pricesVisible = false; // 直近の応答に価格が含まれていたか（＝価格を表示してよいか）
 let partnerName = ''; // 認証済み取引先の表示名（ヘッダー表示用）
 let regDone = false; // 登録モーダルで登録が完了したか（二重登録防止・閉じた後にカートへ戻す判定・2026-11-18）
+let currentOrigin = 'ALL'; // 産地の絞り込み（ALL / CAMBODIA / JAPAN）。カテゴリーと掛け合わせて使う（2026-11-18）
+
+// カテゴリー（食材の種類で分ける・2026-11-18）。web_stock の products_master「category_id」にこの id を入れる。
+// 並び順＝ボタンの並び順。冷凍かどうかは商品コードの頭文字 B（魚コード規則）で判定し、カードに ❄️ を出す
+const CATEGORY_DEFS = [
+    { id: 'FISH',          jp: '🐟 鮮魚',                en: '🐟 Fresh Fish' },
+    { id: 'UNI',           jp: '🟠 ウニ',                en: '🟠 Uni (Sea Urchin)' },
+    { id: 'SHELLFISH',     jp: '🦐 貝・エビ・カニ',      en: '🦐 Shellfish, Shrimp & Crab' },
+    { id: 'SQUID_OCTOPUS', jp: '🦑 イカ・タコ',          en: '🦑 Squid & Octopus' },
+    { id: 'PREPARED',      jp: '🍱 加工品・珍味',        en: '🍱 Prepared & Delicacies' },
+    { id: 'FROZEN_FISH',   jp: '❄️ 冷凍の魚',            en: '❄️ Frozen Fish' },
+    { id: 'OTHER_FOOD',    jp: '🥩 その他食材',          en: '🥩 Other Foods' },
+    { id: 'VEGE',          jp: '🥬 野菜',                en: '🥬 Vegetables' },
+    { id: 'OIL&SEASONING', jp: '🧂 調味料・油',          en: '🧂 Oil & Seasoning' },
+    { id: 'KITCHEN',       jp: '🍳 厨房用品',            en: '🍳 Kitchen' }
+];
+// 旧カテゴリー値 → 新カテゴリー（シートの付け替え前後どちらでも商品が消えないようにするための読み替え）
+const LEGACY_CATEGORY_MAP = { 'FRESH-FILLET/DR/SD': 'FISH', 'FRESH-WHOLE': 'FISH', 'FROZEN': 'FROZEN_FISH' };
+// 産地の切り替え（カテゴリーとは別の行に出す）
+const ORIGIN_DEFS = [
+    { id: 'ALL',      jp: 'すべての産地',     en: 'All origins' },
+    { id: 'CAMBODIA', jp: '🇰🇭 カンボジア産', en: '🇰🇭 Cambodia' },
+    { id: 'JAPAN',    jp: '🇯🇵 日本産',       en: '🇯🇵 Japan' }
+];
 
 // 2. UI TEXT
 const UI_TEXT = {
@@ -54,7 +78,7 @@ const UI_TEXT = {
         exportLocked: "Excelへの出力は、取引先ログイン後にご利用いただけます。",
         clearBtn: 'クリア', recommendTitle: "🔥 本日のおすすめ", noProducts: '該当商品なし',
         stock: 'STOCK', stockLeft: '残り', size: 'サイズ', emptyCart: '商品が選択されていません。',
-        weightCalc: '重量計算', qtyCalc: '数量計算', labelNotes: 'メモ',
+        weightCalc: '重量計算', qtyCalc: '数量計算', labelNotes: 'メモ', frozenBadge: '❄️ 冷凍',
         modalTitle: "新規登録",
         labelShop: "店名",
         labelStaff: "担当者名",
@@ -89,7 +113,7 @@ const UI_TEXT = {
         exportLocked: "Excel export is available after partner login.",
         clearBtn: 'Clear', recommendTitle: "🔥 Recommendation", noProducts: 'No products',
         stock: 'STOCK', stockLeft: 'Stock ', size: 'Size', emptyCart: 'Cart is empty.',
-        weightCalc: 'Weight', qtyCalc: 'Quantity', labelNotes: 'Notes',
+        weightCalc: 'Weight', qtyCalc: 'Quantity', labelNotes: 'Notes', frozenBadge: '❄️ Frozen',
         modalTitle: "Registration",
         labelShop: "Shop Name",
         labelStaff: "Contact Person",
@@ -110,7 +134,9 @@ function esc(str) { return String(str || '').replace(/&/g, '&amp;').replace(/</g
 function getProductName(p) { return currentLang === 'jp' ? (p.name_jp || p.name_en || '') : (p.name_en || p.name_jp || ''); }
 function getProductComment(p) { return currentLang === 'jp' ? (p.comment_jp || p.comment_en || '') : (p.comment_en || p.comment_jp || ''); }
 function getVariantName(v) { return currentLang === 'jp' ? (v.variant_name_jp || v.variant_name_en || '') : (v.variant_name_en || v.variant_name_jp || ''); }
-function getCategoryValue(p) { return (p.category_id || p.category || '').trim(); }
+function getCategoryValue(p) { const c = (p.category_id || p.category || '').trim(); return LEGACY_CATEGORY_MAP[c] || c; }
+// 冷凍品か（魚コード規則：頭文字 B＝冷凍。旧カテゴリー FROZEN と新カテゴリー FROZEN_FISH も冷凍扱い）
+function isFrozenProduct(p) { return /^B/i.test(String(p.code || '').trim()) || getCategoryValue(p) === 'FROZEN_FISH'; }
 function toNumber(v, f = 0) { const n = Number(v); return Number.isFinite(n) ? n : f; }
 function getCalcClass(p) { return (p.variants || []).some(v => String(v.price_unit).toLowerCase() === 'kg') ? 'weight' : 'qty'; }
 function getCalcLabel(p) { return getCalcClass(p) === 'weight' ? UI_TEXT[currentLang].weightCalc : UI_TEXT[currentLang].qtyCalc; }
@@ -273,23 +299,21 @@ function applyFilters() {
 
         const countryVal = String(p.country || '').trim().toUpperCase();
 
+        // 産地はカテゴリーと掛け合わせる（例：貝・エビ × 日本産）・2026-11-18
+        const matchesOrigin = (currentOrigin === 'ALL' || countryVal === currentOrigin);
+
         let matchesCat = false;
         if (currentCategory === 'OUT_OF_STOCK') {
             matchesCat = (totalStock <= 0);
-        } else if (currentCategory === 'COUNTRY_KH') {
-            matchesCat = (countryVal === 'CAMBODIA' && totalStock > 0);
-        } else if (currentCategory === 'COUNTRY_JP') {
-            matchesCat = (countryVal === 'JAPAN' && totalStock > 0);
         } else {
-            // 鮮魚一匹（FRESH-WHOLE）はフィレ系カテゴリへ統合表示（2026-08-05）。データ側のカテゴリ値は変更しない
-            const catMatch = (currentCategory === 'ALL' || getCategoryValue(p) === currentCategory ||
-                (currentCategory === 'FRESH-FILLET/DR/SD' && getCategoryValue(p) === 'FRESH-WHOLE'));
+            // 旧カテゴリー値（FRESH-WHOLE 等）は getCategoryValue で新カテゴリーに読み替え済み
+            const catMatch = (currentCategory === 'ALL' || getCategoryValue(p) === currentCategory);
             matchesCat = catMatch && (totalStock > 0);
         }
         const matchesSearch = !search ||
             getProductName(p).toLowerCase().includes(search) ||
             getProductComment(p).toLowerCase().includes(search);
-        return matchesCat && matchesSearch;
+        return matchesCat && matchesOrigin && matchesSearch;
     });
     lastFiltered = filtered; // Excelダウンロード「表示中」が参照する
     displayProducts(filtered);
@@ -371,6 +395,7 @@ function buildCard(p) {
             <div class="size-calc-row">
                 <p class="size-detail">${esc(p.size || '')}</p>
                 <span class="calc-mini ${getCalcClass(p)}">${getCalcLabel(p)}</span>
+                ${isFrozenProduct(p) ? `<span class="frozen-badge" style="display:inline-block; margin-left:4px; padding:1px 7px; border-radius:10px; font-size:0.7rem; font-weight:bold; background:#e3f2fd; color:#1565c0; white-space:nowrap;">${t.frozenBadge}</span>` : ''}
             </div>
             <div class="variant-list">${vsHTML}</div>
         </div>
@@ -462,7 +487,8 @@ function setLang(lang) {
     currentLang = lang;
     const t = UI_TEXT[lang];
     document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.id === 'lang-' + lang));
-    const mapping = { 'cat-all': t.cat_all, 'cat-kh': t.cat_kh, 'cat-jp': t.cat_jp,'cat-frozen': t.cat_frozen, 'cat-fillet': t.cat_fillet, 'cat-oil': t.cat_oil, 'cat-kitchen': t.cat_kitchen, 'cat-vege': t.cat_vege, 'cat-waiting': t.cat_waiting, 'inquiry-text': t.inquiry, 'search-input': t.searchPlaceholder, 'notice-summary-text': t.noticeTitle, 'notice-body-content': t.noticeBody, 'recommend-title': t.recommendTitle, 'export-current-btn': t.exportCurrent, 'export-all-btn': t.exportAll };
+    renderCategoryNav(); // カテゴリー・産地のボタンは script.js で組み立てる（表記も言語に追従）
+    const mapping = { 'inquiry-text': t.inquiry, 'search-input': t.searchPlaceholder, 'notice-summary-text': t.noticeTitle, 'notice-body-content': t.noticeBody, 'recommend-title': t.recommendTitle, 'export-current-btn': t.exportCurrent, 'export-all-btn': t.exportAll };
     for (let id in mapping) {
         const el = document.getElementById(id);
         if (el) {
@@ -473,6 +499,53 @@ function setLang(lang) {
     }
     updateAccessUi(); // ログインボタンの表記も言語に追従させる
     applyFilters(); renderCart();
+}
+
+// カテゴリーのボタン列を CATEGORY_DEFS から組み立てる（index.html の旧ボタンは置き換える・2026-11-18）
+// 並び：全在庫 → 食材カテゴリー → 入荷待ち（最後）→ 問い合わせ・カート（既存のまま）
+function renderCategoryNav() {
+    const nav = document.querySelector('.category-nav');
+    if (!nav) return;
+    const t = UI_TEXT[currentLang];
+    nav.querySelectorAll('.nav-btn').forEach(b => b.remove());
+    const anchor = document.getElementById('inquiry-btn') || nav.querySelector('.cart-wrapper') || null;
+    const make = (id, label, cat, extraClass) => {
+        const b = document.createElement('button');
+        b.className = 'nav-btn' + (extraClass ? ' ' + extraClass : '') + (cat === currentCategory ? ' active' : '');
+        b.id = id;
+        b.type = 'button';
+        b.textContent = label;
+        b.onclick = () => filterCategory(cat, b);
+        nav.insertBefore(b, anchor);
+    };
+    make('cat-all', t.cat_all, 'ALL');
+    CATEGORY_DEFS.forEach(c => make('cat-' + c.id.toLowerCase().replace(/[^a-z0-9]+/g, '-'), currentLang === 'jp' ? c.jp : c.en, c.id));
+    make('cat-waiting', t.cat_waiting, 'OUT_OF_STOCK', 'nav-btn-waiting');
+    renderOriginFilter();
+}
+
+// 産地の切り替え（カテゴリー列の下に1行で出す。ナビと一緒に画面上部に固定される）
+function renderOriginFilter() {
+    const nav = document.querySelector('.category-nav');
+    if (!nav) return;
+    let bar = document.getElementById('origin-filter');
+    if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'origin-filter';
+        bar.style.cssText = 'flex-basis:100%; display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:6px; padding-top:6px;';
+        nav.appendChild(bar);
+    }
+    bar.innerHTML = ORIGIN_DEFS.map(o => {
+        const on = (o.id === currentOrigin);
+        return `<button type="button" data-origin="${o.id}" style="padding:4px 12px; font-size:0.78rem; border-radius:16px; border:1px solid ${on ? '#333' : '#bbb'}; background:${on ? '#333' : '#fff'}; color:${on ? '#fff' : '#333'}; cursor:pointer;">${esc(currentLang === 'jp' ? o.jp : o.en)}</button>`;
+    }).join('');
+    bar.querySelectorAll('button').forEach(b => { b.onclick = () => filterOrigin(b.dataset.origin); });
+}
+
+function filterOrigin(origin) {
+    currentOrigin = origin || 'ALL';
+    renderOriginFilter();
+    applyFilters();
 }
 
 // 7. UI CONTROL
@@ -948,6 +1021,7 @@ function exportCatalog(scope) {
 // 10. INITIALIZE
 document.addEventListener('DOMContentLoaded', async () => {
     loadPartnerName(); // 保存済みの取引先名を先に読む（fetchProducts のUI更新で使う）
+    renderCategoryNav(); // 新しいカテゴリー列を先に出す（読み込み中に旧ボタンが見えないように）
     if (IS_TELEGRAM_MINIAPP) {
         const sdkReady = await loadTelegramSdk();
         if (sdkReady) { try { window.Telegram.WebApp.ready(); window.Telegram.WebApp.expand(); } catch (e) {} }
