@@ -2,6 +2,8 @@
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwgE8fOWPyXkr2WTZNIvH5G30ptWzQIK6DCO7kVK9x4b6RgSlHBY2wgmNwc42aA_WUOKA/exec'; // 2026-07-06 新ブック移行：新GASの/execに切替
 const TELEGRAM_API_URL = 'https://telegram-bot-729928920450.asia-northeast1.run.app/';
 const TELEGRAM_LINK = 'https://t.me/SAKANAYAJAPON';
+// Telegram 連携用 Bot（start=電話番号 で Users の行と chat_id を紐付ける）
+const TG_BOT_URL = 'https://t.me/sakanaya_bot';
 
 // 取引先アクセス（価格の出し分け・2026-09-18）
 // 価格は GAS が「トークンを検証したうえで返す／返さない」を決める。ここでの pricesVisible は
@@ -27,6 +29,7 @@ let lastFiltered = []; // 直近の絞り込み結果（Excelダウンロード�
 let catalogUpdateDate = ''; // カタログの更新日（ダウンロードファイル名用）
 let pricesVisible = false; // 直近の応答に価格が含まれていたか（＝価格を表示してよいか）
 let partnerName = ''; // 認証済み取引先の表示名（ヘッダー表示用）
+let regDone = false; // 登録モーダルで登録が完了したか（二重登録防止・閉じた後にカートへ戻す判定・2026-11-18）
 
 // 2. UI TEXT
 const UI_TEXT = {
@@ -40,7 +43,8 @@ const UI_TEXT = {
         unlockTitle: "取引先ログイン",
         unlockLead: "お渡ししている取引先コードをご入力ください。価格が表示されます。",
         unlockPlaceholder: "取引先コード", unlockSubmit: "ログイン", unlockCancel: "キャンセル",
-        unlockHelp: "コードをお持ちでないお客様は、Telegram からお気軽にお問い合わせください。",
+        unlockHelp: "コードをお持ちでないお客様は、下のボタンからご登録のうえ Telegram と連携してください。ご注文前でも、確認後に取引先コードをお送りします。",
+        unlockRegisterBtn: "📝 初めての方（新規登録）",
         unlockSending: "確認中です…📡",
         unlockOk: "✅ 確認できました。価格を表示します。",
         unlockOkTg: "✅ 確認できました。次回からは Telegram で開くだけで価格が表示されます。",
@@ -59,7 +63,10 @@ const UI_TEXT = {
         btnRegister: "登録",
         btnFirstOrder: "初めての方", btnRepeatOrder: "ご注文",
         btnSubmitFirst: "登録案内を受け取る", btnSubmitRepeat: "注文する",
-                noticeBody:`・初めてのご注文の際には、必ず「初めての方」のボタンからご登録お願い致します。<br>・写真をクリックしていただきますと商品説明も見ていただけます。<br>・フィレからもご注文いただけますので、色々なお魚をぜひお試しください。`,
+        regOk: "✅ ご登録を受け付けました！\n下のボタンから Telegram と連携してください。確認後、取引先コード（価格表示用）を Telegram でお送りします📩\n※ご注文はこのまま続けていただけます🛒",
+        regTgBtn: "📱 Telegramと連携する",
+        regClose: "閉じる",
+                noticeBody:`・初めての方は「初めての方」ボタンからご登録のうえ、Telegramと連携してください。ご注文前でも取引先コード（価格表示用）をお送りします。<br>・写真をクリックしていただきますと商品説明も見ていただけます。<br>・フィレからもご注文いただけますので、色々なお魚をぜひお試しください。`,
         },
         en: {
         cat_all: "ALL of Stock", cat_kh: "🇰🇭 CAMBODIA", cat_jp: "🇯🇵 JAPAN", origin_kh: "CAMBODIA", origin_jp: "JAPAN", size_selectable: "Size Selection Available", noProducts: 'No products', cat_frozen: "FROZEN",
@@ -71,7 +78,8 @@ const UI_TEXT = {
         unlockTitle: "Partner login",
         unlockLead: "Enter the partner code we issued to you to see prices.",
         unlockPlaceholder: "Partner code", unlockSubmit: "Log in", unlockCancel: "Cancel",
-        unlockHelp: "Don't have a code yet? Please contact us on Telegram.",
+        unlockHelp: "Don't have a code yet? Register with the button below and connect Telegram. We'll send your partner code once we've confirmed — no order needed.",
+        unlockRegisterBtn: "📝 First time? Register",
         unlockSending: "Checking… 📡",
         unlockOk: "✅ Verified. Showing prices.",
         unlockOkTg: "✅ Verified. Next time, prices will show automatically when you open this from Telegram.",
@@ -90,7 +98,10 @@ const UI_TEXT = {
         btnRegister: "Register",
         btnFirstOrder: "First Time", btnRepeatOrder: "Order",
         btnSubmitFirst: "Get Guide", btnSubmitRepeat: "Order",
-                noticeBody:`- For your first order, please make sure to register via the "First Time" button.<br>- Click a product photo to see its description.<br>- Fillets are also available to order — please try a variety of fish.`
+        regOk: "✅ Registration received!\nPlease connect Telegram with the button below. Once confirmed, we'll send your partner code (to see prices) on Telegram 📩\n*You can also keep ordering right away 🛒",
+        regTgBtn: "📱 Connect Telegram",
+        regClose: "Close",
+                noticeBody:`- First time? Please register via the "First Time" button and connect Telegram. We'll send your partner code (to see prices) even before your first order.<br>- Click a product photo to see its description.<br>- Fillets are also available to order — please try a variety of fish.`
     }
 };
 
@@ -129,6 +140,20 @@ function clearAccess() {
 }
 function loadPartnerName() {
     try { partnerName = localStorage.getItem(ACCESS_NAME_KEY) || ''; } catch (e) { partnerName = ''; }
+}
+
+// Telegram 連携（Bot を start=電話番号 で開く）。登録完了モーダルと注文完了モーダルで共通（2026-11-18）
+// Mini App 内では Telegram の openTelegramLink を使い、アプリ内で Bot に移動する
+function openTelegramLinkForPhone(phone) {
+    const ph = String(phone || '').replace(/\D/g, '');
+    const url = ph ? `${TG_BOT_URL}?start=${ph}` : TG_BOT_URL;
+    try {
+        if (IS_TELEGRAM_MINIAPP && window.Telegram && window.Telegram.WebApp && typeof window.Telegram.WebApp.openTelegramLink === 'function') {
+            window.Telegram.WebApp.openTelegramLink(url);
+            return;
+        }
+    } catch (e) {}
+    window.open(url, '_blank');
 }
 
 // Telegram Mini App の SDK を動的に読み込む（通常ブラウザの表示速度に影響させないため index.html には置かない）。
@@ -261,8 +286,8 @@ function applyFilters() {
                 (currentCategory === 'FRESH-FILLET/DR/SD' && getCategoryValue(p) === 'FRESH-WHOLE'));
             matchesCat = catMatch && (totalStock > 0);
         }
-        const matchesSearch = !search || 
-            getProductName(p).toLowerCase().includes(search) || 
+        const matchesSearch = !search ||
+            getProductName(p).toLowerCase().includes(search) ||
             getProductComment(p).toLowerCase().includes(search);
         return matchesCat && matchesSearch;
     });
@@ -282,9 +307,9 @@ function displayProducts(products) {
 
     if (rc) rc.innerHTML = recs.map(buildCard).join('');
     if (rs) recs.length > 0 ? rs.classList.remove('hidden') : rs.classList.add('hidden');
-    
-    pc.innerHTML = norms.length === 0 && recs.length === 0 
-        ? `<p style="text-align:center;padding:30px;">${UI_TEXT[currentLang].noProducts}</p>` 
+
+    pc.innerHTML = norms.length === 0 && recs.length === 0
+        ? `<p style="text-align:center;padding:30px;">${UI_TEXT[currentLang].noProducts}</p>`
         : norms.map(buildCard).join('');
 }
 
@@ -294,13 +319,13 @@ function buildCard(p) {
     const name = esc(getProductName(p));
 
     let originHTML = '';
-    const countryVal = String(p.country || '').trim().toUpperCase(); 
+    const countryVal = String(p.country || '').trim().toUpperCase();
     if (countryVal === 'CAMBODIA') {
         originHTML = `<div class="origin-tag"><span class="origin-text">${t.origin_kh}</span><img src="images/kh-flag.png" class="country-flag" alt="KH"></div>`;
     } else if (countryVal === 'JAPAN') {
         originHTML = `<div class="origin-tag"><span class="origin-text">${t.origin_jp}</span><img src="images/jp-flag.png" class="country-flag" alt="JP"></div>`;
     }
-    
+
     const vsHTML = (p.variants || [])
         .filter(v => {
             const stockNum = toNumber(v.stock, 0);
@@ -382,7 +407,7 @@ function changeCartQty(vid, delta) {
     }
     cart[vid].qty += delta;
     if (cart[vid].qty <= 0) delete cart[vid];
-    applyFilters(); 
+    applyFilters();
     renderCart();
 }
 
@@ -483,10 +508,20 @@ function submitFirstOrder() {
     document.getElementById('label-phone').textContent = t.labelPhone;
     document.getElementById('btn-cancel').textContent = t.btnCancel;
     document.getElementById('btn-submit').textContent = t.btnRegister;
+    // 開き直したときは登録前の状態に戻す（Telegram連携ボタンを隠す・登録ボタンを押せるように）
+    regDone = false;
+    const submitBtn = document.getElementById('btn-submit');
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.style.display = ''; }
+    const tgBtn = document.getElementById('reg-tg-btn');
+    if (tgBtn) tgBtn.style.display = 'none';
     setRegStatus('', '#666'); // 前回の成否メッセージを消してから開く
     document.getElementById('first-time-modal').style.display = 'flex';
 }
-function closeFirstTimeModal() { document.getElementById('first-time-modal').style.display = 'none'; }
+function closeFirstTimeModal() {
+    document.getElementById('first-time-modal').style.display = 'none';
+    // 登録後に閉じた場合、カートに商品があればカートへ戻して注文を続けてもらう
+    if (regDone && Object.keys(cart).length > 0) document.getElementById('cart-panel')?.classList.add('show');
+}
 
 // 登録モーダルのインライン状態行（#reg-status-msg）を色付きで更新（H-5・デザイン§4-3）
 function setRegStatus(msg, color) {
@@ -496,7 +531,22 @@ function setRegStatus(msg, color) {
     el.style.color = color || '#666';
 }
 
+// 登録完了後に出す「Telegramと連携する」ボタン（index.html は変えずに状態行の直後へ差し込む・2026-11-18）
+function ensureRegTelegramButton() {
+    let btn = document.getElementById('reg-tg-btn');
+    if (btn) return btn;
+    const status = document.getElementById('reg-status-msg');
+    if (!status || !status.parentNode) return null;
+    btn = document.createElement('button');
+    btn.id = 'reg-tg-btn';
+    btn.type = 'button';
+    btn.style.cssText = 'display:none; width:100%; margin:12px 0 4px; padding:12px; font-size:0.95rem; font-weight:bold; border:none; border-radius:6px; background:#229ED9; color:#fff; cursor:pointer;';
+    status.parentNode.insertBefore(btn, status.nextSibling);
+    return btn;
+}
+
 async function processFirstTimeRegistration() {
+    if (regDone) return; // 登録済みのモーダルで再度押されても二重登録しない
     const s = document.getElementById('reg-shop-name')?.value.trim(), n = document.getElementById('reg-staff-name')?.value.trim(), p = document.getElementById('reg-phone')?.value.trim();
     const submitBtn = document.getElementById('btn-submit');
     // 入力不足：状態行に案内してモーダル保持（デザイン§3-4）
@@ -515,23 +565,29 @@ async function processFirstTimeRegistration() {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const result = await res.json();
         if (!result || result.status !== 'ok') throw new Error((result && result.message) || 'register failed');
-        // 成功：Telegramへは飛ばさず、選んだカートへ戻って注文を続けてもらう（導線A・2026-07-08）。
-        // Telegram連携は注文完了モーダルのボタンから（アプリ内ブラウザでカートが空に見える問題の解消）。
-        setRegStatus(currentLang === 'jp'
-            ? '✅ ご登録を受け付けました！\nこのままご注文いただけます🛒（Telegram通知はご注文後にご案内します）'
-            : '✅ Registration received!\nYou can order right away 🛒 (We\'ll set up Telegram notifications after your order)', '#2e7d32');
-        localStorage.setItem('user_phone', p); // 注文確認と注文後のTelegram連携ボタンで再利用
-        setTimeout(() => {
-            closeFirstTimeModal();
-            document.getElementById('cart-panel')?.classList.add('show'); // 選んだカートに戻す
-        }, 1500);
+        // 成功：その場で Telegram 連携ボタンを出す（注文しなくても連携→取引先コード発行ができる・2026-11-18）。
+        // 自動では Telegram へ飛ばさない（アプリ内ブラウザでカートが空に見える問題の回避・導線A 2026-07-08 を踏襲）。
+        // モーダルは自動で閉じない。閉じるとカートに商品があればカートへ戻る（closeFirstTimeModal）
+        regDone = true;
+        const t = UI_TEXT[currentLang];
+        setRegStatus(t.regOk, '#2e7d32');
+        try { localStorage.setItem('user_phone', p); } catch (e) {} // 注文確認と Telegram 連携ボタンで再利用
+        if (submitBtn) submitBtn.style.display = 'none'; // 登録ボタンは役目を終えたので隠す
+        const cancelBtn = document.getElementById('btn-cancel');
+        if (cancelBtn) cancelBtn.textContent = t.regClose;
+        const tgBtn = ensureRegTelegramButton();
+        if (tgBtn) {
+            tgBtn.textContent = t.regTgBtn;
+            tgBtn.onclick = () => openTelegramLinkForPhone(p);
+            tgBtn.style.display = '';
+        }
     } catch (e) {
         // 失敗：入力値を保持し再試行可能に（カートも保持）
         setRegStatus(currentLang === 'jp'
             ? '⚠️ ご登録に失敗しました。通信環境をご確認のうえ、もう一度お試しください。'
             : '⚠️ Registration failed. Please check your connection and try again.', '#c62828');
     } finally {
-        if (submitBtn) submitBtn.disabled = false;
+        if (submitBtn && !regDone) submitBtn.disabled = false;
     }
 }
 
@@ -628,9 +684,10 @@ function showOrderResult(kind, orderNo) {
         secondary.onclick = closeOrderResult; // カートは受付完了時に破棄済み（M-3）
         primary.textContent = jp ? '📱 Telegramで確認を受け取る' : '📱 Get updates on Telegram';
         primary.onclick = () => { // 注文受付済み＝カート破棄済みなのでページを離れても安全（M-3）
-            const ph = (localStorage.getItem('user_phone') || '').replace(/\D/g, '');
+            let ph = '';
+            try { ph = localStorage.getItem('user_phone') || ''; } catch (e) {}
             closeOrderResult();
-            window.open(ph ? `https://t.me/sakanaya_bot?start=${ph}` : 'https://t.me/sakanaya_bot', '_blank');
+            openTelegramLinkForPhone(ph);
         };
     }
     document.getElementById('order-result-modal').style.display = 'flex';
@@ -737,6 +794,22 @@ function onAccessBtnClick() {
     openUnlockModal();
 }
 
+// ログインモーダル内の「初めての方（新規登録）」ボタン。コードを持っていない人を登録へ案内する
+// （index.html は変えずに案内文の直後へ差し込む・2026-11-18）
+function ensureUnlockRegisterButton() {
+    let btn = document.getElementById('unlock-register-btn');
+    if (btn) return btn;
+    const help = document.getElementById('unlock-help');
+    if (!help || !help.parentNode) return null;
+    btn = document.createElement('button');
+    btn.id = 'unlock-register-btn';
+    btn.type = 'button';
+    btn.style.cssText = 'display:block; width:100%; margin:8px 0; padding:10px; font-size:0.9rem; font-weight:bold; border:1px solid #666; border-radius:6px; background:#fff; color:#333; cursor:pointer;';
+    btn.onclick = () => { closeUnlockModal(); submitFirstOrder(); };
+    help.parentNode.insertBefore(btn, help.nextSibling);
+    return btn;
+}
+
 function openUnlockModal() {
     const t = UI_TEXT[currentLang];
     const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
@@ -745,6 +818,8 @@ function openUnlockModal() {
     set('unlock-help', t.unlockHelp);
     set('unlock-btn-cancel', t.unlockCancel);
     set('unlock-btn-submit', t.unlockSubmit);
+    const regBtn = ensureUnlockRegisterButton();
+    if (regBtn) regBtn.textContent = t.unlockRegisterBtn;
     const input = document.getElementById('unlock-code');
     if (input) { input.placeholder = t.unlockPlaceholder; input.value = ''; }
     const modal = document.getElementById('unlock-modal');
