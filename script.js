@@ -18,7 +18,12 @@ const TG_LAUNCH_HASH = (() => { try { return location.hash || ''; } catch (e) { 
 const IS_TELEGRAM_MINIAPP = /(^#|&)tgWebApp(Data|Platform|Version)=/.test(TG_LAUNCH_HASH);
 let tgLoginTried = false; // 失効時の無限ループ防止：1回の表示につき1度だけ試す
 
-let currentLang = (navigator.language || navigator.userLanguage || 'ja').startsWith('ja') ? 'jp' : 'en';
+// 表示言語：お客様が自分で選んだ言語を端末に保存し、次回もその言語で開く。未選択なら端末（ブラウザ）の言語で自動判定（2026-11-18）
+const LANG_KEY = 'preferred_lang';
+function loadSavedLang() { try { const v = localStorage.getItem(LANG_KEY); return (v === 'jp' || v === 'en') ? v : ''; } catch (e) { return ''; } }
+let currentLang = loadSavedLang() || ((navigator.language || navigator.userLanguage || 'ja').startsWith('ja') ? 'jp' : 'en');
+// 言語ボタンの選択表示だけを先に反映する（商品の読み込み中も、どちらの言語か分かるように）
+function markLangButtons() { document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.id === 'lang-' + currentLang)); }
 let currentCategory = 'ALL';
 let allProducts = [];
 let cart = {};
@@ -483,10 +488,12 @@ function renderCart() {
 
 function clearCart() { cart = {}; currentClientOrderId = ''; applyFilters(); renderCart(); closeCartPanel(); }
 
-function setLang(lang) {
+// save=false は起動時の反映用。ボタンを押したとき（引数1つ）は選んだ言語を端末に保存する
+function setLang(lang, save = true) {
     currentLang = lang;
+    if (save) { try { localStorage.setItem(LANG_KEY, lang); } catch (e) {} }
     const t = UI_TEXT[lang];
-    document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.id === 'lang-' + lang));
+    markLangButtons();
     renderCategoryNav(); // カテゴリー・産地のボタンは script.js で組み立てる（表記も言語に追従）
     const mapping = { 'inquiry-text': t.inquiry, 'search-input': t.searchPlaceholder, 'notice-summary-text': t.noticeTitle, 'notice-body-content': t.noticeBody, 'recommend-title': t.recommendTitle, 'export-current-btn': t.exportCurrent, 'export-all-btn': t.exportAll };
     for (let id in mapping) {
@@ -1021,6 +1028,7 @@ function exportCatalog(scope) {
 // 10. INITIALIZE
 document.addEventListener('DOMContentLoaded', async () => {
     loadPartnerName(); // 保存済みの取引先名を先に読む（fetchProducts のUI更新で使う）
+    markLangButtons(); // 読み込みを待たずに、選ばれている言語のボタンに色を付ける
     renderCategoryNav(); // 新しいカテゴリー列を先に出す（読み込み中に旧ボタンが見えないように）
     if (IS_TELEGRAM_MINIAPP) {
         const sdkReady = await loadTelegramSdk();
@@ -1028,7 +1036,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!getAccessToken()) await tryTelegramAutoLogin();
     }
     await fetchProducts();
-    setLang(currentLang);
+    setLang(currentLang, false); // 起動時は保存しない（自動判定の言語を「お客様の選択」として固定しないため）
     const saved = localStorage.getItem('temp_cart');
     if (saved) { try { Object.assign(cart, JSON.parse(saved)); renderCart(); localStorage.removeItem('temp_cart'); } catch (e) {} }
 });
