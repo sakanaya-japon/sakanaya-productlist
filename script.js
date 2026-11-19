@@ -63,7 +63,7 @@ const ORIGIN_DEFS = [
 // 2. UI TEXT
 const UI_TEXT = {
     jp: {
-        cat_all: "全在庫商品", cat_kh: "🇰🇭 カンボジア産", cat_jp: "🇯🇵 日本産", origin_kh: "カンボジア産", origin_jp: "日本産", size_selectable: "サイズ選択可", noProducts: '該当商品なし', cat_frozen: "冷凍品",
+        cat_all: "全在庫商品", cat_recommend: "🔥 本日のおすすめ", cat_new: "🆕 新商品", newBadge: "🆕 新商品", cat_kh: "🇰🇭 カンボジア産", cat_jp: "🇯🇵 日本産", origin_kh: "カンボジア産", origin_jp: "日本産", size_selectable: "サイズ選択可", noProducts: '該当商品なし', cat_frozen: "冷凍品",
         cat_fillet: "鮮魚フィレ・セミドレス・ドレス・ホール", cat_oil: "調味料・油", cat_kitchen: "厨房用品", cat_vege: "野菜", cat_waiting: "入荷待ち", inquiry: "問い合わせ",
         searchPlaceholder: "商品名で検索...", noticeTitle: "【お知らせ】クリック▲で詳細を閉じる",
         orderBarLabel: "📋 ご注文内容", orderNote: "* 最終的な数量・重量は納品時に確定いたします",
@@ -98,7 +98,7 @@ const UI_TEXT = {
                 noticeBody:`・初めての方は「初めての方」ボタンからご登録のうえ、Telegramと連携してください。ご注文前でも取引先コード（価格表示用）をお送りします。<br>・写真をクリックしていただきますと商品説明も見ていただけます。<br>・フィレからもご注文いただけますので、色々なお魚をぜひお試しください。`,
         },
         en: {
-        cat_all: "ALL of Stock", cat_kh: "🇰🇭 CAMBODIA", cat_jp: "🇯🇵 JAPAN", origin_kh: "CAMBODIA", origin_jp: "JAPAN", size_selectable: "Size Selection Available", noProducts: 'No products', cat_frozen: "FROZEN",
+        cat_all: "ALL of Stock", cat_recommend: "🔥 Recommendation", cat_new: "🆕 New Arrivals", newBadge: "🆕 NEW", cat_kh: "🇰🇭 CAMBODIA", cat_jp: "🇯🇵 JAPAN", origin_kh: "CAMBODIA", origin_jp: "JAPAN", size_selectable: "Size Selection Available", noProducts: 'No products', cat_frozen: "FROZEN",
         cat_fillet: "FILLET/DR/SD/WHOLE", cat_oil: "OIL & SEASONING", cat_kitchen: "KITCHEN", cat_vege: "VEGETABLES", cat_waiting: "OUT OF STOCK", inquiry: "INQUIRY",
         searchPlaceholder: "Search...", noticeTitle: "【 NOTICE 】 Click for details",
         orderBarLabel: "📋 Your Order", orderNote: "* Final price confirmed upon delivery",
@@ -141,6 +141,10 @@ function getProductComment(p) { return currentLang === 'jp' ? (p.comment_jp || p
 function getVariantName(v) { return currentLang === 'jp' ? (v.variant_name_jp || v.variant_name_en || '') : (v.variant_name_en || v.variant_name_jp || ''); }
 function getCategoryValue(p) { const c = (p.category_id || p.category || '').trim(); return LEGACY_CATEGORY_MAP[c] || c; }
 // 冷凍品か（魚コード規則：頭文字 B＝冷凍。旧カテゴリー FROZEN と新カテゴリー FROZEN_FISH も冷凍扱い）
+// 新商品の目印：products_master の new_item 列に 1（TRUE・○ も可）を入れた商品（2026-11-19）
+function isFlagOn(v) { const s = String(v ?? '').trim().toUpperCase(); return s === '1' || s === 'TRUE' || s === '○' || s === 'YES'; }
+function isNewProduct(p) { return isFlagOn(p.new_item); }
+function isRecommendProduct(p) { return toNumber(p.recommend_today, 0) === 1; }
 function isFrozenProduct(p) { return /^B/i.test(String(p.code || '').trim()) || getCategoryValue(p) === 'FROZEN_FISH'; }
 function toNumber(v, f = 0) { const n = Number(v); return Number.isFinite(n) ? n : f; }
 function getCalcClass(p) { return (p.variants || []).some(v => String(v.price_unit).toLowerCase() === 'kg') ? 'weight' : 'qty'; }
@@ -312,7 +316,11 @@ function applyFilters() {
             matchesCat = (totalStock <= 0);
         } else {
             // 旧カテゴリー値（FRESH-WHOLE 等）は getCategoryValue で新カテゴリーに読み替え済み
-            const catMatch = (currentCategory === 'ALL' || getCategoryValue(p) === currentCategory);
+            // 「本日のおすすめ」「新商品」は食材カテゴリーと同じ列のボタンから絞り込む（2026-11-19）
+            const catMatch = currentCategory === 'ALL' ||
+                (currentCategory === 'RECOMMEND' ? isRecommendProduct(p) :
+                 currentCategory === 'NEW' ? isNewProduct(p) :
+                 getCategoryValue(p) === currentCategory);
             matchesCat = catMatch && (totalStock > 0);
         }
         const matchesSearch = !search ||
@@ -331,8 +339,10 @@ function displayProducts(products) {
     const rc = document.getElementById('recommend-container');
     if (!pc) return;
 
-    const recs = products.filter(p => toNumber(p.recommend_today, 0) === 1);
-    const norms = products.filter(p => toNumber(p.recommend_today, 0) !== 1);
+    // 新商品の絞り込み中は、おすすめ枠に分けず一覧にまとめて出す
+    const splitRec = currentCategory !== 'NEW';
+    const recs = splitRec ? products.filter(isRecommendProduct) : [];
+    const norms = splitRec ? products.filter(p => !isRecommendProduct(p)) : products;
 
     if (rc) rc.innerHTML = recs.map(buildCard).join('');
     if (rs) recs.length > 0 ? rs.classList.remove('hidden') : rs.classList.add('hidden');
@@ -400,6 +410,7 @@ function buildCard(p) {
             <div class="size-calc-row">
                 <p class="size-detail">${esc(p.size || '')}</p>
                 <span class="calc-mini ${getCalcClass(p)}">${getCalcLabel(p)}</span>
+                ${isNewProduct(p) ? `<span class="new-badge" style="display:inline-block; margin-left:4px; padding:1px 7px; border-radius:10px; font-size:0.7rem; font-weight:bold; background:#fff3e0; color:#e65100; white-space:nowrap;">${t.newBadge}</span>` : ''}
                 ${isFrozenProduct(p) ? `<span class="frozen-badge" style="display:inline-block; margin-left:4px; padding:1px 7px; border-radius:10px; font-size:0.7rem; font-weight:bold; background:#e3f2fd; color:#1565c0; white-space:nowrap;">${t.frozenBadge}</span>` : ''}
             </div>
             <div class="variant-list">${vsHTML}</div>
@@ -509,7 +520,7 @@ function setLang(lang, save = true) {
 }
 
 // カテゴリーのボタン列を CATEGORY_DEFS から組み立てる（index.html の旧ボタンは置き換える・2026-11-18）
-// 並び：全在庫 → 食材カテゴリー → 入荷待ち（最後）→ 問い合わせ・カート（既存のまま）
+// 並び：全在庫 → 本日のおすすめ → 新商品 → 食材カテゴリー → 入荷待ち（最後）→ 問い合わせ・カート（既存のまま）
 function renderCategoryNav() {
     const nav = document.querySelector('.category-nav');
     if (!nav) return;
@@ -526,6 +537,8 @@ function renderCategoryNav() {
         nav.insertBefore(b, anchor);
     };
     make('cat-all', t.cat_all, 'ALL');
+    make('cat-recommend', t.cat_recommend, 'RECOMMEND');
+    make('cat-new', t.cat_new, 'NEW');
     CATEGORY_DEFS.forEach(c => make('cat-' + c.id.toLowerCase().replace(/[^a-z0-9]+/g, '-'), currentLang === 'jp' ? c.jp : c.en, c.id));
     make('cat-waiting', t.cat_waiting, 'OUT_OF_STOCK', 'nav-btn-waiting');
     renderOriginFilter();
