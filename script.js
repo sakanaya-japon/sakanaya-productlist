@@ -92,7 +92,7 @@ const UI_TEXT = {
         btnRegister: "登録",
         btnFirstOrder: "初めての方", btnRepeatOrder: "ご注文",
         btnSubmitFirst: "登録案内を受け取る", btnSubmitRepeat: "注文する",
-        regOk: "✅ ご登録を受け付けました！\n下のボタンから Telegram と連携してください。確認後、取引先コード（価格表示用）を Telegram でお送りします📩\n※ご注文はこのまま続けていただけます🛒",
+        regOk: "✅ ご登録を受け付けました！\n下のボタンから Telegram と連携してください。確認後、取引先コード（価格表示用）を Telegram でお送りします📩\nコードが届いたら、Telegram の「🛒 注文する」から開くとコードを入力せずに価格が表示されます。\n※ご注文はこのまま続けていただけます🛒",
         regTgBtn: "📱 Telegramと連携する",
         regClose: "閉じる",
                 noticeBody:`・初めての方は、カート（🛒）を開くと出る「初めての方」ボタンからご登録のうえ、Telegramと連携してください。ご注文前でも取引先コード（価格表示用）をお送りします。<br>・写真をクリックしていただきますと商品説明も見ていただけます。<br>・フィレからもご注文いただけますので、色々なお魚をぜひお試しください。`,
@@ -127,7 +127,7 @@ const UI_TEXT = {
         btnRegister: "Register",
         btnFirstOrder: "First Time", btnRepeatOrder: "Order",
         btnSubmitFirst: "Get Guide", btnSubmitRepeat: "Order",
-        regOk: "✅ Registration received!\nPlease connect Telegram with the button below. Once confirmed, we'll send your partner code (to see prices) on Telegram 📩\n*You can also keep ordering right away 🛒",
+        regOk: "✅ Registration received!\nPlease connect Telegram with the button below. Once confirmed, we'll send your partner code (to see prices) on Telegram 📩\nAfter that, open \"🛒 Order\" in Telegram — prices show without typing the code.\n*You can also keep ordering right away 🛒",
         regTgBtn: "📱 Connect Telegram",
         regClose: "Close",
                 noticeBody:`- First time? Open the cart (🛒) and tap the "First Time" button to register, then connect Telegram. We'll send your partner code (to see prices) even before your first order.<br>- Click a product photo to see its description.<br>- Fillets are also available to order — please try a variety of fish.`

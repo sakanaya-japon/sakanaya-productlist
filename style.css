@@ -536,3 +536,77 @@ header {
     }
     .contact-section-inline .access-btn { max-width: 150px; } /* 長い店名でも1行に収める */
 }
+
+/* ══════════════════════════════════════════════════════════
+   10. スマホで画面に収まらない問題の対策（2026-11-20）
+   ・iPhone（Safari / LINE・Telegram の中の画面）は、文字が 16px 未満の入力欄に触れると
+     ページを自動で拡大し、閉じた後も拡大したままになる。取引先ログインの入力欄（13px）を
+     開いた瞬間に拡大され、ログイン画面が右に切れていた → 入力欄はすべて 16px にする
+   ・入力欄の width:100% + padding が箱からはみ出していた → border-box にする
+   ・英字のつながった長い商品名（SHIROAMADAI_FILLET_UROKO…）がカード幅を超えていた → 途中で折り返す
+   ══════════════════════════════════════════════════════════ */
+html {
+    -webkit-text-size-adjust: 100%; /* 横向きにしたときの文字の自動拡大を止める */
+    text-size-adjust: 100%;
+    overflow-x: clip;               /* 万一はみ出す要素があっても横スクロールさせない（sticky は効いたまま） */
+}
+
+input, select, textarea {
+    font-size: 16px;                /* 16px 未満だと iPhone が入力時に拡大する */
+    max-width: 100%;
+    box-sizing: border-box;
+}
+button { box-sizing: border-box; }
+
+/* 長い英字の商品名・規格名を途中で折り返す */
+.info h3,
+.size-detail,
+.variant-select-btn,
+.cart-item strong { overflow-wrap: anywhere; word-break: normal; }
+
+/* 各ダイアログ（新規登録・取引先ログイン・注文確認・注文結果）：左右に余白を残して画面内に収め、
+   縦に長いときはダイアログの中だけスクロールさせる（index.html のインライン指定を上書き） */
+#first-time-modal > div,
+#unlock-modal > div,
+#order-check-modal > div,
+#order-result-modal > div {
+    box-sizing: border-box;
+    width: calc(100% - 32px) !important;
+    max-width: 400px !important;
+    max-height: calc(100% - 32px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+}
+#unlock-code { text-transform: uppercase; }
+
+/* 写真ポップアップの説明文 */
+#modal-caption { overflow-wrap: anywhere; }
+
+@media (max-width: 768px) {
+    /* カート：左右 8px の余白で画面内に収める（以前は width:100% + 枠線で 4px はみ出していた） */
+    .cart-panel {
+        box-sizing: border-box;
+        width: auto !important;
+        left: 8px;
+        right: 8px !important;
+        top: 8px;
+        height: min(450px, calc(100vh - 16px));
+        max-height: calc(100vh - 16px);
+    }
+}
+
+@media (max-width: 480px) {
+    /* 本日のおすすめ：本体の一覧と同じ 2 列にそろえる（以前は 1 枚が画面の 2/3 幅で右側が空いていた） */
+    #recommend-container.recommend-container {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr;
+        width: auto !important;
+        gap: 10px !important;
+        padding: 10px !important;
+    }
+    #recommend-container.recommend-container .card { flex: none; width: auto; }
+    .card { min-width: 0; }
+    .variant-select-btn { padding: 8px; font-size: 0.82rem; }
+}
+#unlock-code::placeholder { text-transform: none; } /* 案内文（プレースホルダー）は大文字にしない */
