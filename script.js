@@ -95,7 +95,7 @@ const UI_TEXT = {
         regOk: "✅ ご登録を受け付けました！\n下のボタンから Telegram と連携してください。確認後、取引先コード（価格表示用）を Telegram でお送りします📩\n※ご注文はこのまま続けていただけます🛒",
         regTgBtn: "📱 Telegramと連携する",
         regClose: "閉じる",
-                noticeBody:`・初めての方は「初めての方」ボタンからご登録のうえ、Telegramと連携してください。ご注文前でも取引先コード（価格表示用）をお送りします。<br>・写真をクリックしていただきますと商品説明も見ていただけます。<br>・フィレからもご注文いただけますので、色々なお魚をぜひお試しください。`,
+                noticeBody:`・初めての方は、カート（🛒）を開くと出る「初めての方」ボタンからご登録のうえ、Telegramと連携してください。ご注文前でも取引先コード（価格表示用）をお送りします。<br>・写真をクリックしていただきますと商品説明も見ていただけます。<br>・フィレからもご注文いただけますので、色々なお魚をぜひお試しください。`,
         },
         en: {
         cat_all: "ALL of Stock", cat_recommend: "🔥 Recommendation", cat_new: "🆕 New Arrivals", newBadge: "🆕 NEW", cat_kh: "🇰🇭 CAMBODIA", cat_jp: "🇯🇵 JAPAN", origin_kh: "CAMBODIA", origin_jp: "JAPAN", size_selectable: "Size Selection Available", noProducts: 'No products', cat_frozen: "FROZEN",
@@ -130,7 +130,7 @@ const UI_TEXT = {
         regOk: "✅ Registration received!\nPlease connect Telegram with the button below. Once confirmed, we'll send your partner code (to see prices) on Telegram 📩\n*You can also keep ordering right away 🛒",
         regTgBtn: "📱 Connect Telegram",
         regClose: "Close",
-                noticeBody:`- First time? Please register via the "First Time" button and connect Telegram. We'll send your partner code (to see prices) even before your first order.<br>- Click a product photo to see its description.<br>- Fillets are also available to order — please try a variety of fish.`
+                noticeBody:`- First time? Open the cart (🛒) and tap the "First Time" button to register, then connect Telegram. We'll send your partner code (to see prices) even before your first order.<br>- Click a product photo to see its description.<br>- Fillets are also available to order — please try a variety of fish.`
     }
 };
 
