@@ -41,7 +41,7 @@ var ACCESS_SHEET_NAME = 'access_codes';
 //    別ブックに置きたい場合だけ、専用キー ACCESS_CODES_SS_ID を設定する。
 var ACCESS_CODES_SS_ID_KEY = 'ACCESS_CODES_SS_ID';
 var ACCESS_SECRET_KEY = 'ACCESS_TOKEN_SECRET';
-var TOKEN_TTL_DAYS = 90;   // トークンの有効期間。切れたらカタログが再ログインを促す
+var TOKEN_TTL_DAYS = 365;  // トークンの有効期間。切れたらカタログが再ログインを促す（2026-11-20：90 → 365 日。コードの失効・期限切れは isCodeActive_ が毎回確かめるので、取引終了時は revokeAccessCode で止める）
 var CODE_TTL_DAYS = 365;   // 発行するコードの既定の有効期間
 // 紛らわしい文字（0/O/1/I/L）を除いた英数字。口頭やチャットで伝えても取り違えにくい
 var CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';

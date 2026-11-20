@@ -294,8 +294,17 @@ function filterCategory(cat, btn) {
     currentCategory = cat;
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
+    syncCategorySelect();
     window.scrollTo({ top: 0, behavior: 'smooth' });
     applyFilters();
+}
+// スマホ用のカテゴリーのプルダウンを、今選ばれているカテゴリーに合わせる
+function syncCategorySelect() {
+    const sel = document.getElementById('cat-select');
+    if (!sel) return;
+    sel.value = currentCategory;
+    if (sel.value !== currentCategory) sel.selectedIndex = 0; // 一覧に無い値のときは先頭（全在庫）を表示
+    sel.classList.toggle('is-filtered', currentCategory !== 'ALL');
 }
 
 function applyFilters() {
@@ -527,20 +536,43 @@ function renderCategoryNav() {
     const t = UI_TEXT[currentLang];
     nav.querySelectorAll('.nav-btn').forEach(b => b.remove());
     const anchor = document.getElementById('inquiry-btn') || nav.querySelector('.cart-wrapper') || null;
+    // スマホではボタン列の代わりにプルダウン1つで選ぶ（ボタン列が画面の半分を占めていたため・2026-11-20）。
+    // 表示の切り替えは style.css（768px 以下でボタンを隠し、プルダウンを出す）。中身はボタンと同じ並び
+    let sel = document.getElementById('cat-select');
+    if (!sel) {
+        sel = document.createElement('select');
+        sel.id = 'cat-select';
+        sel.className = 'cat-select';
+        sel.onchange = () => {
+            const cat = sel.value;
+            const btn = Array.from(nav.querySelectorAll('.nav-btn')).find(b => b.dataset.cat === cat) || null;
+            filterCategory(cat, btn);
+            sel.blur(); // 選んだ後にキーボード・選択画面のフォーカスを残さない
+        };
+        nav.insertBefore(sel, anchor);
+    }
+    sel.setAttribute('aria-label', currentLang === 'jp' ? 'カテゴリーを選ぶ' : 'Choose a category');
+    sel.textContent = '';
     const make = (id, label, cat, extraClass) => {
+        const o = document.createElement('option');
+        o.value = cat;
+        o.textContent = label;
+        sel.appendChild(o);
         const b = document.createElement('button');
         b.className = 'nav-btn' + (extraClass ? ' ' + extraClass : '') + (cat === currentCategory ? ' active' : '');
         b.id = id;
         b.type = 'button';
         b.textContent = label;
+        b.dataset.cat = cat;
         b.onclick = () => filterCategory(cat, b);
-        nav.insertBefore(b, anchor);
+        nav.insertBefore(b, sel);
     };
     make('cat-all', t.cat_all, 'ALL');
     make('cat-recommend', t.cat_recommend, 'RECOMMEND');
     make('cat-new', t.cat_new, 'NEW');
     CATEGORY_DEFS.forEach(c => make('cat-' + c.id.toLowerCase().replace(/[^a-z0-9]+/g, '-'), currentLang === 'jp' ? c.jp : c.en, c.id));
     make('cat-waiting', t.cat_waiting, 'OUT_OF_STOCK', 'nav-btn-waiting');
+    syncCategorySelect();
     renderOriginFilter();
 }
 
