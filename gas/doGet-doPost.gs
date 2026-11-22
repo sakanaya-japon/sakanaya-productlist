@@ -126,6 +126,14 @@ function doPost(e) {
       return handleTgLogin_(data);
     }
 
+    // ═══════════════════════════════════════════════
+    // 5. 商品リストのExcelダウンロード履歴（export-log.gs・2026-11-22）
+    //    トークン検証済みの取引先だけ「ダウンロード履歴」に記録し、社内グループへ通知。
+    // ═══════════════════════════════════════════════
+    if (data.action === "log_export") {
+      return handleLogExport_(data);
+    }
+
     return output({ status: "error", message: "Invalid action" });
 
   } catch (err) {
