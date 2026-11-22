@@ -1068,6 +1068,43 @@ function exportCatalog(scope) {
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    // ダウンロード履歴を GAS に記録（ヘッダー行を除いた行数）。DL を妨げないよう待たずに投げる
+    logCatalogExport(scope, rows.length - 1);
+}
+
+// ダウンロード履歴の送信（2026-11-22・gas/export-log.gs）
+// 取引先名はトークンからサーバー側で確定するため、ここでは送らない。
+// 記録の失敗はお客様に見せない（DL自体は成功しているため、エラー表示で誤解させない）。
+const EXPORT_LOG_TIMEOUT_MS = 10000;
+async function logCatalogExport(scope, count) {
+    const token = getAccessToken();
+    if (!token || !GAS_URL) return;
+    const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), EXPORT_LOG_TIMEOUT_MS) : null;
+    try {
+        // Content-Type は付けない（text/plain 扱い＝CORS プリフライト回避。他の action と同じ）
+        const res = await fetch(GAS_URL, {
+            method: 'POST',
+            keepalive: true,
+            signal: ctrl ? ctrl.signal : undefined,
+            body: JSON.stringify({
+                action: 'log_export',
+                token: token,
+                scope: scope,
+                count: count,
+                lang: currentLang,
+                category: scope === 'current' ? currentCategory : '',
+                ua: (navigator.userAgent || '').slice(0, 200)
+            })
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json().catch(() => null);
+        if (!data || data.status !== 'ok') throw new Error((data && data.message) || 'invalid response');
+    } catch (err) {
+        console.warn('[export-log] 記録に失敗しました:', err && err.message ? err.message : err);
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
 }
 
 // 10. INITIALIZE
